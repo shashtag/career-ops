@@ -1,0 +1,338 @@
+[
+  {
+    "tag": "input",
+    "type": "file",
+    "name": "",
+    "id": "",
+    "placeholder": "",
+    "labelText": "Autofill from resume Upload your resume here to autofill key application fields. Upload file"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "c2b89ec9-e028-4478-8600-0619b217e5b3",
+    "id": "c2b89ec9-e028-4478-8600-0619b217e5b3",
+    "placeholder": "Type here...",
+    "labelText": "Legal First Name"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "40022016-e0f8-41b2-9e61-de1e5db2d728",
+    "id": "40022016-e0f8-41b2-9e61-de1e5db2d728",
+    "placeholder": "Type here...",
+    "labelText": "Legal Last Name"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "_systemfield_name",
+    "id": "_systemfield_name",
+    "placeholder": "Type here...",
+    "labelText": "Preferred First Name"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "a466ec76-7629-410f-9709-47f412c7dae3",
+    "id": "a466ec76-7629-410f-9709-47f412c7dae3",
+    "placeholder": "Type here...",
+    "labelText": "Preferred Last Name"
+  },
+  {
+    "tag": "input",
+    "type": "email",
+    "name": "_systemfield_email",
+    "id": "_systemfield_email",
+    "placeholder": "hello@example.com...",
+    "labelText": "Email"
+  },
+  {
+    "tag": "input",
+    "type": "tel",
+    "name": "7e73e5ca-9289-4923-bcd6-bf88c1315d47",
+    "id": "7e73e5ca-9289-4923-bcd6-bf88c1315d47",
+    "placeholder": "1-415-555-1234...",
+    "labelText": "Phone"
+  },
+  {
+    "tag": "input",
+    "type": "file",
+    "name": "",
+    "id": "_systemfield_resume",
+    "placeholder": "",
+    "labelText": "Resume"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "0fbfe0ea-1183-404a-813e-e5ca3a5669eb",
+    "id": "0fbfe0ea-1183-404a-813e-e5ca3a5669eb",
+    "placeholder": "Type here...",
+    "labelText": "Pronouns"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "61495319-fe64-467b-bfd3-c1b75806acde",
+    "id": "61495319-fe64-467b-bfd3-c1b75806acde",
+    "placeholder": "Type here...",
+    "labelText": "How do you pronounce your name?"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "4a124dd3-71c1-4872-bf72-0c2f85435614",
+    "id": "4a124dd3-71c1-4872-bf72-0c2f85435614",
+    "placeholder": "Type here...",
+    "labelText": "LinkedIn Profile"
+  },
+  {
+    "tag": "input",
+    "type": "",
+    "name": "",
+    "id": "",
+    "placeholder": "Start typing...",
+    "labelText": "What city/country will you work from?"
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40-labeled-radio-0",
+    "placeholder": "",
+    "labelText": "I am authorized to work in the country due to my nationality."
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40-labeled-radio-1",
+    "placeholder": "",
+    "labelText": "I am authorized to work in the country based on a valid work permit. I do not need a company to sponsor my visa."
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40-labeled-radio-2",
+    "placeholder": "",
+    "labelText": "I am authorized to work in the country based on a valid work permit. I will need to be sponsored by the company I work for."
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_af12352a-0f1e-4e01-8d01-83ce40d7ee40-labeled-radio-3",
+    "placeholder": "",
+    "labelText": "I am not authorized to work in the country and will need visa support."
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_4ed5ef0b-80a3-4c5a-9c12-0bfa341577ce",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_4ed5ef0b-80a3-4c5a-9c12-0bfa341577ce-labeled-radio-0",
+    "placeholder": "",
+    "labelText": "Zapier Website"
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_4ed5ef0b-80a3-4c5a-9c12-0bfa341577ce",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_4ed5ef0b-80a3-4c5a-9c12-0bfa341577ce-labeled-radio-1",
+    "placeholder": "",
+    "labelText": "Online Job Ad or Job Board"
+  },
+  {
+    "tag": "input",
+    "type": "radio",
+    "name": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_4ed5ef0b-80a3-4c5a-9c12-0bfa341577ce",
+    "id": "8d15b5ea-ddab-4836-b53d-c3e8e6f72609_4ed5ef0b-80a3-4c5a-9c12-0bfa341577ce-labeled-radio-2",
+    "placeholder": "",
+    "labelText": "Zapier's Talent Acquisition Team Outreach"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "f84c3195-d534-4f41-89c5-c4313dd7f65c",
+    "id": "f84c3195-d534-4f41-89c5-c4313dd7f65c",
+    "placeholder": "Type here...",
+    "labelText": "Please share specific information on how you heard about this role (for example: what job board did you use, where was the job ad posted, etc.)."
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "95a37f09-67ba-4a3a-be82-aeeb4bb6d142",
+    "id": "95a37f09-67ba-4a3a-be82-aeeb4bb6d142",
+    "placeholder": "Type here...",
+    "labelText": "Pick one AI workflow you've built. Walk us through what triggers it, what it does, and what you had to iterate on. (Please share a link or screenshot!)"
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "153f78f0-f9b9-40b1-9e26-cbab39d57d87",
+    "id": "153f78f0-f9b9-40b1-9e26-cbab39d57d87",
+    "placeholder": "Type here...",
+    "labelText": "Share a specific example where AI changed quality or stakeholder experience — not just speed — and explain what you did to get there."
+  },
+  {
+    "tag": "input",
+    "type": "text",
+    "name": "9bf2e5bf-1b14-4d05-a862-5126d2f04a09",
+    "id": "9bf2e5bf-1b14-4d05-a862-5126d2f04a09",
+    "placeholder": "Type here...",
+    "labelText": "What’s one way you’ve expanded your impact at work with AI — what problem were you trying to solve, why did you approach it that way, and how has your approach evolved over time?"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "6d98ad2b-53a3-484a-983b-86741b67bae5",
+    "id": "",
+    "placeholder": "",
+    "labelText": "Yes No"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "7a9c4f8e-1beb-49ef-9ef9-d7e5bcfdee42",
+    "id": "",
+    "placeholder": "",
+    "labelText": "Yes No"
+  },
+  {
+    "tag": "textarea",
+    "type": "",
+    "name": "88d65df4-5596-493e-a9c2-edfc347c164a",
+    "id": "88d65df4-5596-493e-a9c2-edfc347c164a",
+    "placeholder": "Type here...",
+    "labelText": "Do you have 5 or more years of professional software engineering experience that includes meaningful work on CI/CD systems, testing infrastructure, or release tooling? (Yes / No) If yes, briefly describe the systems you worked on and your level of ownership. Target 200–400 words."
+  },
+  {
+    "tag": "textarea",
+    "type": "",
+    "name": "aa41ed9c-fd9b-48ed-acf6-ef320a0a1837",
+    "id": "aa41ed9c-fd9b-48ed-acf6-ef320a0a1837",
+    "placeholder": "Type here...",
+    "labelText": "Describe a CI/CD pipeline, release system, or internal developer tool you designed or significantly improved. What problem did it solve, what tradeoffs did you evaluate, and what was the measurable impact on the engineers who used it? Target 200–400 words."
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "2876a8bc-47a7-4678-9d62-4add61b27fff",
+    "id": "",
+    "placeholder": "",
+    "labelText": "Yes No"
+  },
+  {
+    "tag": "textarea",
+    "type": "",
+    "name": "b80c3602-b662-434b-ae4f-c8ea59c535a1",
+    "id": "b80c3602-b662-434b-ae4f-c8ea59c535a1",
+    "placeholder": "Type here...",
+    "labelText": "Describe a time you had to troubleshoot a failing end-to-end test pipeline. What was the root cause, what tools/techniques did you use to diagnose it, and how did you resolve it?"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "American Indian or Alaska Native",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001594002-labeled-checkbox-0",
+    "placeholder": "",
+    "labelText": "American Indian or Alaska Native"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Native Hawaiian or Other Pacific Islander",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001594002-labeled-checkbox-4",
+    "placeholder": "",
+    "labelText": "Native Hawaiian or Other Pacific Islander"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Not Listed",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001594002-labeled-checkbox-7",
+    "placeholder": "",
+    "labelText": "Not Listed"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Trans",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001595002-labeled-checkbox-3",
+    "placeholder": "",
+    "labelText": "Trans"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Not listed",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001595002-labeled-checkbox-5",
+    "placeholder": "",
+    "labelText": "Not listed"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Cognitive",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-0",
+    "placeholder": "",
+    "labelText": "Cognitive"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Emotional",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-1",
+    "placeholder": "",
+    "labelText": "Emotional"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Mental",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-2",
+    "placeholder": "",
+    "labelText": "Mental"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Physical",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-3",
+    "placeholder": "",
+    "labelText": "Physical"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Hearing",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-4",
+    "placeholder": "",
+    "labelText": "Hearing"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Visual",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-5",
+    "placeholder": "",
+    "labelText": "Visual"
+  },
+  {
+    "tag": "input",
+    "type": "checkbox",
+    "name": "Not listed",
+    "id": "97ed0bcd-ede2-4dc7-9641-521fd2760ae8_gh_quest_4001598002-labeled-checkbox-6",
+    "placeholder": "",
+    "labelText": "Not listed"
+  },
+  {
+    "tag": "textarea",
+    "type": "",
+    "name": "g-recaptcha-response",
+    "id": "g-recaptcha-response-100000",
+    "placeholder": "",
+    "labelText": ""
+  }
+]
