@@ -29,6 +29,8 @@ portals.yml
 modes/_profile.md
 .update-dismissed
 .update-lock
+.cv-sync-state.json
+.cv-backups/
 
 # Secrets (never commit — use .env.example as template)
 .env
