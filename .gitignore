@@ -39,6 +39,7 @@ modes/_profile.md
 .resolved-prompt-*
 node_modules/
 bun.lock
+batch/scraped-jds/
 
 # OS
 .DS_Store
