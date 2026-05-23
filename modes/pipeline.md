@@ -10,7 +10,8 @@ Process job URLs stored in `data/pipeline.md`. The user adds URLs at any time an
    b. **Extract JD** using Playwright (browser_navigate + browser_snapshot) → WebFetch → WebSearch
    c. If the URL is not accessible → mark as `- [!]` with a note and continue
    d. **Execute full auto-pipeline**: Evaluation A-F → Report .md → PDF (if score >= 3.0) → Tracker
-   e. **Move from "Pending" to "Processed"**: `- [x] #NNN | URL | Company | Role | Score/5 | PDF ✅/❌`
+   e. **Interactive/Autonomous Applying**: If running interactively and the evaluation score is high-fit (score >= 4.0/5), prompt the user to launch the Chrome Apply Automator (`scratch/apply_automator.mjs`) synchronously. If running with `--non-interactive`, the pipeline automatically launches the Apply Automator for roles scoring >= 4.0/5 without prompting. This autofills the application form with drafted custom answers, triggers the Simplify autofiller extension, and hands off execution to the user for final review and submission in Chrome.
+   f. **Move from "Pending" to "Processed"**: `- [x] #NNN | URL | Company | Role | Score/5 | PDF ✅/❌`
 3. **If there are 3+ pending URLs**, launch agents in parallel (Agent tool with `run_in_background`) to maximize speed.
 4. **At the end**, show summary table:
 

@@ -51,3 +51,18 @@ batch/scraped-jds/
 .claude/memory/
 career-dashboard
 package-lock.json
+
+# User's personal writing digest
+article-digest.md
+
+# Backups and temporary logs
+*.bak
+*.log
+
+# Untracked scratch files (keeping tracked ones)
+scratch/*
+!scratch/apply_automator.mjs
+!scratch/evaluate-pipeline.mjs
+!scratch/fill-zapier-form-autonomous.mjs
+!scratch/fill-zapier-release-autonomous.mjs
+!scratch/generate-tailored-cv.mjs

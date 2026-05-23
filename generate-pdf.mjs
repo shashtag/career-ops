@@ -70,6 +70,7 @@ function normalizeTextForATS(html) {
     t = t.replace(/\u2026/g, () => { bump('ellipsis', 1); return '...'; });
     t = t.replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, () => { bump('zero-width', 1); return ''; });
     t = t.replace(/\u00A0/g, () => { bump('nbsp', 1); return ' '; });
+    t = t.replace(/\\n/g, () => { bump('literal-newline', 1); return ' '; });
     return t;
   }
 }

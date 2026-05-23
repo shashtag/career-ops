@@ -32,9 +32,10 @@ Read `config/profile.yml`. Check `cv.output_format`:
 - If `"latex"`, execute the full pipeline from `modes/latex.md`
 - Otherwise (default), execute the full pipeline from `modes/pdf.md`
 
-## Step 4 — Draft Application Answers (only if score >= 4.5)
+## Step 4 — Draft Application Answers (only if score >= 4.0)
 
-If the final score is >= 4.5, generate a draft of responses for the application form:
+If the final score is >= 4.0, generate a draft of responses for the application form:
+
 
 1. **Extract form questions**: Use Playwright to navigate to the form and take a snapshot. If they cannot be extracted, use the generic questions.
 2. **Generate responses** following the tone (see below).
@@ -73,3 +74,14 @@ If the final score is >= 4.5, generate a draft of responses for the application 
 Record it in `data/applications.md` with all columns including Report and PDF as ✅.
 
 **If any step fails**, continue with the next ones and mark the failed step as pending in the tracker.
+
+## Step 6 — Fill Application Form (Apply)
+
+If the score is >= 4.0, automatically launch the apply automator script to populate the form and upload the resume:
+
+```bash
+node scratch/apply_automator.mjs --id {id} --non-interactive
+```
+
+This will launch Google Chrome via remote debugging (port 9222), navigate to the job application page, upload the tailored CV, populate all standard fields, fill custom dropdowns, and inject the drafted custom answers into textareas/text inputs, halting just before submission for final user review in Chrome.
+

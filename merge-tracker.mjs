@@ -324,10 +324,6 @@ for (const file of tsvFiles) {
     });
   }
 
-  if (!duplicate) {
-    // Exact entry number match (only if same company!)
-    duplicate = existingApps.find(app => app.num === addition.num && normalizeCompany(app.company) === normalizeCompany(addition.company));
-  }
 
   if (!duplicate) {
     // Company + role fuzzy match

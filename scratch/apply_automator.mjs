@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
 import { exec } from 'child_process';
 import { chromium } from 'playwright';
+import yaml from 'js-yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
@@ -36,6 +37,717 @@ const colors = {
   bgBlue: '\x1b[44m',
   bgMagenta: '\x1b[45m'
 };
+
+// Load profile from config/profile.yml
+function loadProfile() {
+  const profilePath = join(projectRoot, 'config', 'profile.yml');
+  if (!existsSync(profilePath)) {
+    return null;
+  }
+  try {
+    const content = readFileSync(profilePath, 'utf-8');
+    return yaml.load(content);
+  } catch (e) {
+    console.error(`Error loading profile: ${e.message}`);
+    return null;
+  }
+}
+
+// Find latest resume PDF in output/
+function findLatestResume() {
+  const outputDir = join(projectRoot, 'output');
+  if (!existsSync(outputDir)) return null;
+  try {
+    const files = readdirSync(outputDir)
+      .filter(f => f.endsWith('.pdf'))
+      .map(f => {
+        const fullPath = join(outputDir, f);
+        return {
+          path: fullPath,
+          name: f,
+          mtime: statSync(fullPath).mtime
+        };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    if (files.length > 0) {
+      return files[0].path;
+    }
+  } catch (e) {
+    console.error(`Error finding latest resume: ${e.message}`);
+  }
+  return null;
+}
+
+// Unified robust autofill engine using Visual-Label DOM Analysis and Node-side Fuzzy Matching
+// Helper to find the best option among choices
+function findBestOption(options, keywords, fallback) {
+  // 1. Try to find an exact or very close match first
+  for (const keyword of keywords) {
+    const cleanKeyword = keyword.toLowerCase().trim();
+    for (const opt of options) {
+      const text = (opt.label || opt.text || '').toLowerCase().trim();
+      if (text === cleanKeyword) {
+        return opt;
+      }
+    }
+  }
+
+  // 2. Try to find a substring match
+  for (const keyword of keywords) {
+    const cleanKeyword = keyword.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const opt of options) {
+      const text = opt.label || opt.text || '';
+      const cleanOpt = text.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanOpt.includes(cleanKeyword)) {
+        return opt;
+      }
+    }
+  }
+
+  // 3. Try fallback
+  if (fallback) {
+    const cleanFallback = fallback.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const opt of options) {
+      const text = opt.label || opt.text || '';
+      const cleanOpt = text.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanOpt.includes(cleanFallback) || cleanFallback.includes(cleanOpt)) {
+        return opt;
+      }
+    }
+  }
+
+  return options[0] || null;
+}
+
+// Unified robust autofill engine using Visual-Label DOM Analysis and Node-side Fuzzy Matching
+async function autofillForm(page, profile, resumePath, customAnswers) {
+  if (!profile) {
+    console.log(`${colors.yellow}⚠️ No profile configuration found to autofill.${colors.reset}`);
+    return;
+  }
+
+  console.log(`\n${colors.cyan}🤖 Running unified visual-label form autofill engine...${colors.reset}`);
+  
+  const candidate = profile.candidate || {};
+  const location = profile.location || {};
+  const nameParts = (candidate.full_name || '').split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+
+  // Get in-browser DOM layout analysis
+  const domLayout = await page.evaluate(() => {
+    function getLabelText(el) {
+      let labelText = '';
+      
+      // A. Try label elements linked by id
+      if (el.id) {
+        const labelEl = document.querySelector(`label[for="${el.id}"]`);
+        if (labelEl) {
+          labelText = labelEl.innerText || labelEl.textContent;
+        }
+      }
+      
+      // B. Climb up to find closest field/question container
+      if (!labelText) {
+        const container = el.closest('.field, .question, .form-group, .field-wrapper, [class*="field"], [class*="question"], [class*="form-row"], [class*="Field"], [class*="Question"]');
+        if (container) {
+          const labelEl = container.querySelector('label');
+          if (labelEl) {
+            labelText = labelEl.innerText || labelEl.textContent;
+          } else {
+            const titleEl = container.querySelector('.label, .title, .question-title, [class*="label"], [class*="title"], [class*="question-text"], [class*="QuestionText"]');
+            if (titleEl) {
+              labelText = titleEl.innerText || titleEl.textContent;
+            } else {
+              const headingEl = container.querySelector('h1, h2, h3, h4, h5');
+              if (headingEl) {
+                labelText = headingEl.innerText || headingEl.textContent;
+              }
+            }
+          }
+        }
+      }
+      
+      // C. Fallback to closest label or previous siblings / placeholder / name / id
+      if (!labelText) {
+        labelText = el.closest('label')?.innerText || el.closest('label')?.textContent || el.previousElementSibling?.innerText || el.previousElementSibling?.textContent || el.placeholder || el.name || el.id || '';
+      }
+      
+      return labelText
+        .replace(/\r?\n/g, ' ')
+        .replace(/\s*\*\s*/g, '')
+        .replace(/\(required\)/gi, '')
+        .replace(/\*required\*/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function getSelectorAndIndex(el) {
+      const tag = el.tagName.toLowerCase();
+      if (el.id) {
+        return { selector: `${tag}[id="${el.id}"]`, index: 0 };
+      }
+      if (el.name) {
+        const allWithName = Array.from(document.querySelectorAll(`${tag}[name="${el.name}"]`));
+        return { selector: `${tag}[name="${el.name}"]`, index: allWithName.indexOf(el) };
+      }
+      
+      const typeAttr = el.getAttribute('type');
+      const selector = typeAttr ? `${tag}[type="${typeAttr}"]` : tag;
+      const allMatches = Array.from(document.querySelectorAll(selector));
+      return { selector, index: allMatches.indexOf(el) };
+    }
+
+    // Capture standard input fields (text, email, tel, file, textarea, etc.)
+    const inputs = Array.from(document.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]):not([type="submit"]):not([type="hidden"]), textarea, [contenteditable="true"]')).map(el => {
+      const { selector, index } = getSelectorAndIndex(el);
+      return {
+        id: el.id || '',
+        name: el.name || '',
+        type: el.tagName.toLowerCase() === 'textarea' ? 'textarea' : (el.getAttribute('type') || 'text'),
+        labelText: getLabelText(el),
+        placeholder: el.placeholder || '',
+        tag: el.tagName.toLowerCase(),
+        selector,
+        index
+      };
+    });
+
+    // Capture standard selects
+    const selects = Array.from(document.querySelectorAll('select')).map(select => {
+      const { selector, index } = getSelectorAndIndex(select);
+      const options = Array.from(select.querySelectorAll('option')).map(opt => ({
+        text: (opt.innerText || opt.textContent || '').trim(),
+        value: opt.getAttribute('value')
+      }));
+      return {
+        id: select.id || '',
+        name: select.name || '',
+        labelText: getLabelText(select),
+        type: 'select',
+        options: options,
+        selector,
+        index
+      };
+    });
+
+    // Capture custom dropdown controls
+    const customDropdowns = Array.from(document.querySelectorAll('[role="combobox"], [class*="select__control"], [class*="select-control"]')).map(el => {
+      let cssSelector = '';
+      if (el.id) {
+        cssSelector = `#${el.id}`;
+      } else {
+        const classes = Array.from(el.classList).filter(c => !c.includes('is-focused') && !c.includes('is-open'));
+        cssSelector = classes.length > 0 ? `.${classes.join('.')}` : el.tagName.toLowerCase();
+      }
+      const allMatches = Array.from(document.querySelectorAll(cssSelector));
+      return {
+        id: el.id || '',
+        labelText: getLabelText(el),
+        type: 'custom-dropdown',
+        selector: cssSelector,
+        index: allMatches.indexOf(el)
+      };
+    });
+
+    // Capture checkboxes
+    const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]')).map(el => {
+      const { selector, index } = getSelectorAndIndex(el);
+      return {
+        id: el.id || '',
+        name: el.name || '',
+        labelText: getLabelText(el),
+        type: 'checkbox',
+        checked: el.checked,
+        selector,
+        index
+      };
+    });
+
+    // Group and capture radio buttons
+    const radioGroups = {};
+    const radioElements = document.querySelectorAll('input[type="radio"]');
+    for (const radio of radioElements) {
+      const name = radio.name || radio.closest('.question, .field, .form-group')?.id || 'unnamed-group';
+      let groupLabel = '';
+      const container = radio.closest('.question, .field, .form-group, .field-wrapper, [class*="field"], [class*="question"]');
+      if (container) {
+        const titleEl = container.querySelector('label, .label, .title, .question-title, h1, h2, h3, h4, span, p');
+        if (titleEl) groupLabel = titleEl.innerText || titleEl.textContent;
+      }
+      if (!groupLabel) groupLabel = name;
+      groupLabel = groupLabel.replace(/\s+/g, ' ').trim();
+
+      let optionLabel = '';
+      if (radio.id) {
+        const optLabelEl = document.querySelector(`label[for="${radio.id}"]`);
+        if (optLabelEl) optionLabel = optLabelEl.innerText || optLabelEl.textContent;
+      }
+      if (!optionLabel) {
+        optionLabel = radio.closest('label')?.innerText || radio.nextElementSibling?.innerText || radio.nextSibling?.textContent || '';
+      }
+      optionLabel = optionLabel.replace(/\s+/g, ' ').trim();
+
+      if (!radioGroups[name]) {
+        radioGroups[name] = {
+          name: name,
+          groupLabel: groupLabel,
+          options: []
+        };
+      }
+      const { selector, index } = getSelectorAndIndex(radio);
+      radioGroups[name].options.push({
+        label: optionLabel,
+        id: radio.id,
+        selector,
+        index
+      });
+    }
+
+    return {
+      inputs,
+      selects,
+      customDropdowns,
+      checkboxes,
+      radioGroups: Object.values(radioGroups)
+    };
+  });
+
+  const logs = [];
+  logs.push = function(msg) {
+    console.log(`   - ${msg}`);
+    return Array.prototype.push.call(this, msg);
+  };
+
+  // Helper to match labels fuzzily
+  function fuzzyLabelMatch(labelText, regexList) {
+    if (!labelText) return false;
+    const cleanLabel = labelText.toLowerCase();
+    for (const regex of regexList) {
+      if (regex.test(cleanLabel)) return true;
+    }
+    return false;
+  }
+
+  // Helper to match custom Section H answers
+  function matchCustomAnswer(labelText, answers) {
+    if (!labelText || !answers || answers.length === 0) return null;
+    const cleanLabel = labelText.toLowerCase();
+    
+    let bestMatch = null;
+    let highestScore = 0;
+
+    const STOP_WORDS = new Set(['in', 'on', 'at', 'to', 'of', 'by', 'is', 'am', 'an', 'as', 'it', 'we', 'he', 'my', 'me', 'or', 'do', 'so', 'if', 'the', 'and', 'for', 'but', 'not', 'you', 'are', 'was', 'out', 'our', 'his', 'her', 'how', 'who', 'why', 'can', 'has', 'had', 'any', 'all', 'with', 'about', 'your', 'would', 'like', 'share']);
+
+    for (const item of answers) {
+      const cleanQuestion = item.question.toLowerCase();
+      
+      // Direct substring match
+      if (cleanLabel.includes(cleanQuestion) || cleanQuestion.includes(cleanLabel)) {
+        return item;
+      }
+
+      // Keyword overlap match (excluding standard stop words but retaining short tech terms >= 2 chars)
+      const words = cleanQuestion.split(/[^a-z0-9]+/).filter(w => w.length >= 2 && !STOP_WORDS.has(w));
+      let matchCount = 0;
+      for (const word of words) {
+        if (cleanLabel.includes(word)) {
+          matchCount++;
+        }
+      }
+
+      const score = words.length > 0 ? (matchCount / words.length) : 0;
+      if (score > highestScore && score >= 0.4) {
+        highestScore = score;
+        bestMatch = item;
+      }
+    }
+
+    return bestMatch;
+  }
+
+  // Define matcher configurations for text / textarea inputs
+  const textMatchers = [
+    {
+      name: 'email',
+      regex: [/email/i, /e-mail/i],
+      value: candidate.email || ''
+    },
+    {
+      name: 'first_name',
+      regex: [/first\s*name/i, /given\s*name/i, /^first$/i],
+      value: firstName
+    },
+    {
+      name: 'last_name',
+      regex: [/last\s*name/i, /family\s*name/i, /^last$/i],
+      value: lastName
+    },
+    {
+      name: 'full_name',
+      regex: [/full\s*name/i, /^name$/i],
+      value: candidate.full_name || ''
+    },
+    {
+      name: 'phone',
+      regex: [/phone/i, /mobile/i, /telephone/i, /tel\b/i],
+      value: candidate.phone || ''
+    },
+    {
+      name: 'linkedin',
+      regex: [/linkedin/i],
+      value: candidate.linkedin ? (candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`) : ''
+    },
+    {
+      name: 'github',
+      regex: [/github/i],
+      value: candidate.github ? (candidate.github.startsWith('http') ? candidate.github : `https://${candidate.github}`) : ''
+    },
+    {
+      name: 'twitter',
+      regex: [/twitter/i, /\bx\b/i, /twitter\s*profile/i, /x\s*profile/i],
+      value: candidate.twitter ? (candidate.twitter.startsWith('http') ? candidate.twitter : `https://${candidate.twitter}`) : ''
+    },
+    {
+      name: 'portfolio',
+      regex: [/portfolio/i, /website/i, /personal\s*site/i, /personal\s*website/i],
+      value: candidate.portfolio_url || ''
+    },
+    {
+      name: 'passport_country',
+      regex: [/passport\s*country/i, /citizenship/i, /citizen/i],
+      value: location.country || 'India'
+    },
+    {
+      name: 'residence_country',
+      regex: [/residence\s*country/i, /country\s*of\s*residence/i, /where\s*do\s*you\s*live/i, /location/i],
+      value: location.country || 'India'
+    },
+    {
+      name: 'notice_period',
+      regex: [/notice\s*period/i, /how\s*soon\s*can\s*you\s*start/i, /start\s*date/i, /availability/i, /when\s*can\s*you\s*start/i],
+      value: candidate.notice_period || profile.candidate?.notice_period || "Immediately / 1 month"
+    },
+    {
+      name: 'salary_expectations',
+      regex: [/salary/i, /compensation/i, /expectation/i, /desired\s*pay/i, /hourly\s*rate/i],
+      value: profile.compensation?.target_range || "₹40-100+ LPA / $50K-150K+ USD"
+    },
+    {
+      name: 'referrer_name',
+      regex: [/referrer\s*name/i, /referral/i],
+      value: ''
+    },
+    {
+      name: 'open_source_contributions',
+      regex: [/open\s*source/i, /contributions/i, /projects/i],
+      value: candidate.open_source_contributions || profile.candidate?.open_source_contributions || "Yes! I am a proud contributor to MDN Web Docs (Mozilla Developer Network) for JavaScript documentation. I also actively develop and maintain open-source developer tooling like career-ops, karada.ai, and go-common packages (which includes concurrent libraries, AST compilers, and slot allocation trackers)."
+    }
+  ];
+
+  // Define matcher configurations for choice elements (select / radio / custom dropdown)
+  const choiceMatchers = [
+    {
+      name: 'pronouns',
+      regex: [/pronoun/i],
+      keywords: ['he', 'him', 'his'],
+      fallback: 'He / Him'
+    },
+    {
+      name: 'gender',
+      regex: [/gender/i, /sex\b/i],
+      keywords: ['male', 'man'],
+      fallback: 'Male'
+    },
+    {
+      name: 'race',
+      regex: [/race/i, /ethnicity/i],
+      keywords: ['decline', 'not to self-identify', 'asian'],
+      fallback: 'Decline to self-identify'
+    },
+    {
+      name: 'veteran',
+      regex: [/veteran/i],
+      keywords: ['not a veteran', 'no', 'decline'],
+      fallback: 'I am not a veteran'
+    },
+    {
+      name: 'disability',
+      regex: [/disability/i],
+      keywords: ['no', 'don\'t have', 'decline'],
+      fallback: 'No, I don\'t have a disability'
+    },
+    {
+      name: 'authorized_to_work',
+      regex: [/authorized\s*to\s*work/i, /legally\s*authorized/i, /eligible\s*to\s*work/i, /authorization/i],
+      keywords: ['yes', 'authorized'],
+      fallback: 'Yes'
+    },
+    {
+      name: 'visa_sponsorship',
+      regex: [/sponsorship/i, /require\s*sponsorship/i, /sponsor\b/i, /need.*sponsor/i, /require.*visa/i],
+      keywords: profile.location?.sponsorship_required === false ? ['no', 'do not require'] : ['yes', 'require'],
+      fallback: profile.location?.sponsorship_required === false ? 'No' : 'Yes'
+    },
+    {
+      name: 'go_ts_proficiency',
+      regex: [/proficiency\s*in\s*go/i, /go\s*and\s*typescript/i, /languages?\s*proficiency/i],
+      keywords: ['confident and productive', 'both, strong', 'proficient in both'],
+      fallback: 'Both, strong'
+    },
+    {
+      name: 'auth_experience',
+      regex: [/auth\s*system/i, /authentication\s*system/i, /experience.*auth/i],
+      keywords: ['solid experience', 'deep experience', 'some exposure'],
+      fallback: 'Solid experience'
+    },
+    {
+      name: 'web_framework_paradigms',
+      regex: [/framework\s*paradigm/i, /web\s*framework/i, /paradigms/i],
+      keywords: ['cross-paradigm', 'meaningful experience with both', 'cross paradigm'],
+      fallback: 'Cross-paradigm'
+    },
+    {
+      name: 'source',
+      regex: [/hear\s*about/i, /source/i, /find\s*us/i, /how\s*did\s*you\s*hear/i],
+      keywords: ['linkedin', 'x/twitter', 'google', 'other'],
+      fallback: 'Linkedin'
+    }
+  ];
+
+  // 1. Fill Text and Textarea Inputs
+  for (const input of domLayout.inputs) {
+    if (input.type === 'file') {
+      // Resume Upload
+      if (resumePath && (input.labelText.toLowerCase().includes('resume') || input.labelText.toLowerCase().includes('cv') || input.labelText.toLowerCase().includes('curriculum'))) {
+        try {
+          await page.locator(input.selector).nth(input.index).setInputFiles(resumePath);
+          logs.push(`Uploaded resume PDF to file field (Label: "${input.labelText}")`);
+        } catch (e) {
+          logs.push(`⚠️ Resume upload failed for label "${input.labelText}": ${e.message}`);
+        }
+      }
+      continue;
+    }
+
+    let filled = false;
+
+    // A. Match standard text profile fields
+    for (const matcher of textMatchers) {
+      if (fuzzyLabelMatch(input.labelText, matcher.regex)) {
+        if (matcher.value !== undefined && matcher.value !== null) {
+          try {
+            const loc = page.locator(input.selector).nth(input.index);
+            await loc.fill(matcher.value);
+            await loc.dispatchEvent('input', { bubbles: true });
+            await loc.dispatchEvent('change', { bubbles: true });
+            logs.push(`Filled "${input.labelText}" with: "${matcher.value.length > 50 ? matcher.value.substring(0, 50) + '...' : matcher.value}"`);
+            filled = true;
+          } catch (e) {
+            // fallback
+          }
+        }
+        break;
+      }
+    }
+
+    if (filled) continue;
+
+    // B. Match custom Section H Answers
+    const customAns = matchCustomAnswer(input.labelText, customAnswers);
+    if (customAns) {
+      try {
+        const loc = page.locator(input.selector).nth(input.index);
+        await loc.fill(customAns.answer);
+        await loc.dispatchEvent('input', { bubbles: true });
+        await loc.dispatchEvent('change', { bubbles: true });
+        logs.push(`Fuzzily matched Section H question & filled custom field:\n     "${input.labelText}" -> "${customAns.answer.substring(0, 50)}..."`);
+      } catch (e) {
+        logs.push(`⚠️ Failed to fill Section H answer for "${input.labelText}": ${e.message}`);
+      }
+    }
+  }
+
+  // 2. Fill standard selects
+  for (const select of domLayout.selects) {
+    for (const matcher of choiceMatchers) {
+      if (fuzzyLabelMatch(select.labelText, matcher.regex)) {
+        const bestOpt = findBestOption(select.options, matcher.keywords, matcher.fallback);
+        if (bestOpt) {
+          try {
+            const loc = page.locator(select.selector).nth(select.index);
+            await loc.selectOption(bestOpt.value, { force: true });
+            await loc.dispatchEvent('change', { bubbles: true });
+            logs.push(`Selected dropdown option "${bestOpt.text}" for label "${select.labelText}"`);
+          } catch (e) {
+            // Fallback: set it in-browser
+            try {
+              await page.evaluate(({ selector, index, value }) => {
+                const el = document.querySelectorAll(selector)[index];
+                if (el) {
+                  el.value = value;
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }, { selector: select.selector, index: select.index, value: bestOpt.value });
+              logs.push(`Selected dropdown option "${bestOpt.text}" for label "${select.labelText}" (in-browser fallback)`);
+            } catch (browserErr) {
+              logs.push(`⚠️ Failed to select option for "${select.labelText}": ${e.message}`);
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // 3. Fill Custom Dropdowns (comboboxes / react-select etc.)
+  for (const dropdown of domLayout.customDropdowns) {
+    for (const matcher of choiceMatchers) {
+      if (fuzzyLabelMatch(dropdown.labelText, matcher.regex)) {
+        try {
+          // Open custom dropdown
+          await page.locator(dropdown.selector).nth(dropdown.index).click();
+          await page.waitForTimeout(500);
+
+          // Type search term if present to filter options (e.g. for virtualized lists)
+          const searchTerm = matcher.fallback || matcher.keywords[0];
+          if (searchTerm) {
+            const inputSelector = `${dropdown.selector} input, [class*="select"] input, input[class*="-input"], input[role="combobox"]`;
+            const searchInput = page.locator(inputSelector).first();
+            if (await searchInput.count() > 0 && await searchInput.isVisible()) {
+              await searchInput.fill(searchTerm);
+              await page.waitForTimeout(500); // Wait for filtering
+            } else {
+              try {
+                // Try focused element typing as backup
+                await page.keyboard.type(searchTerm);
+                await page.waitForTimeout(500);
+              } catch (kbdErr) {
+                // ignore
+              }
+            }
+          }
+
+          // Get open choices
+          const options = await page.evaluate(() => {
+            const selectors = [
+              '[class*="select__option"]',
+              '[class*="-option"]',
+              '[role="option"]',
+              'div[id*="-listbox"] div',
+              'div[class*="option"]'
+            ];
+            for (const sel of selectors) {
+              const elms = Array.from(document.querySelectorAll(sel));
+              if (elms.length > 0) {
+                return elms.map((el, idx) => ({
+                  text: (el.innerText || el.textContent || '').trim(),
+                  id: el.id || '',
+                  selector: `${sel}:nth-child(${idx + 1})`
+                }));
+              }
+            }
+            return [];
+          });
+
+          const bestOpt = findBestOption(options, matcher.keywords, matcher.fallback);
+          if (bestOpt) {
+            const optionSelector = `[class*="select__option"], [class*="-option"], [role="option"], div[id*="-listbox"] div, div[class*="option"]`;
+            await page.locator(optionSelector).filter({ hasText: bestOpt.text }).first().click();
+            logs.push(`Selected custom dropdown option "${bestOpt.text}" for label "${dropdown.labelText}"`);
+          } else {
+            // Close dropdown safely
+            await page.locator(dropdown.selector).nth(dropdown.index).click();
+          }
+        } catch (e) {
+          logs.push(`⚠️ Custom dropdown selection failed for "${dropdown.labelText}": ${e.message}`);
+        }
+        break;
+      }
+    }
+  }
+
+  // 4. Fill Checkboxes
+  for (const cb of domLayout.checkboxes) {
+    let checked = false;
+    
+    // A. Match required consent checkboxes (privacy, terms, accuracy)
+    const consentRegex = [/privacy/i, /consent/i, /agree/i, /terms/i, /policy/i, /acknowledge/i, /data\s*processing/i, /gdpr/i, /statement/i, /declaration/i];
+    if (fuzzyLabelMatch(cb.labelText, consentRegex)) {
+      checked = true;
+      logs.push(`Checked consent checkbox (Label: "${cb.labelText}")`);
+    }
+    
+    // B. Match work authorization
+    const authRegex = [/authorized\s*to\s*work/i, /legally\s*authorized/i];
+    if (fuzzyLabelMatch(cb.labelText, authRegex)) {
+      checked = true;
+      logs.push(`Checked work authorization checkbox (Label: "${cb.labelText}")`);
+    }
+
+    if (checked && !cb.checked) {
+      try {
+        const checkboxLoc = page.locator(cb.selector).nth(cb.index);
+        const labelLoc = page.locator(`label[for="${cb.id}"]`);
+        if (cb.id && await labelLoc.count() > 0 && await labelLoc.isVisible()) {
+          await labelLoc.click();
+        } else {
+          await checkboxLoc.check({ force: true });
+        }
+      } catch (e) {
+        // Fallback: check in-browser
+        try {
+          await page.evaluate(({ selector, index }) => {
+            const el = document.querySelectorAll(selector)[index];
+            if (el && !el.checked) {
+              el.checked = true;
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              el.dispatchEvent(new Event('click', { bubbles: true }));
+            }
+          }, { selector: cb.selector, index: cb.index });
+          logs.push(`Checked checkbox (Label: "${cb.labelText}") (in-browser fallback)`);
+        } catch (browserErr) {
+          logs.push(`⚠️ Failed to check checkbox "${cb.labelText}": ${e.message}`);
+        }
+      }
+    }
+  }
+
+  // 5. Fill Radio Groups
+  for (const group of domLayout.radioGroups) {
+    for (const matcher of choiceMatchers) {
+      if (fuzzyLabelMatch(group.groupLabel, matcher.regex)) {
+        const bestOpt = findBestOption(group.options, matcher.keywords, matcher.fallback);
+        if (bestOpt) {
+          try {
+            const radioLabel = page.locator(`label[for="${bestOpt.id}"]`);
+            if (bestOpt.id && await radioLabel.count() > 0 && await radioLabel.isVisible()) {
+              await radioLabel.click();
+            } else {
+              await page.locator(bestOpt.selector).nth(bestOpt.index).click({ force: true });
+            }
+            logs.push(`Selected radio option "${bestOpt.label}" for group "${group.groupLabel}"`);
+          } catch (e) {
+            try {
+              await page.locator(bestOpt.selector).nth(bestOpt.index).click({ force: true });
+              logs.push(`Selected radio option "${bestOpt.label}" for group "${group.groupLabel}" (forced)`);
+            } catch (clickErr) {
+              logs.push(`⚠️ Failed to select radio option for "${group.groupLabel}": ${clickErr.message}`);
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // Summary of fills
+  console.log(`\n${colors.green}✅ Form filling complete!${colors.reset}`);
+  if (logs.length === 0) {
+    console.log(`   - ${colors.dim}No fields were auto-filled by matchers.${colors.reset}`);
+  }
+}
 
 // Parse applications.md
 function parseApplications() {
@@ -90,6 +802,12 @@ function parseJobUrl(reportPath) {
   const fullPath = join(projectRoot, reportPath);
   if (!existsSync(fullPath)) return null;
   const content = readFileSync(fullPath, 'utf-8');
+  
+  // Try matching markdown link [text](url)
+  const mdMatch = content.match(/\*\*URL:\*\*\s*\[[^\]]+\]\((https?:\/\/[^\s\)]+)\)/i);
+  if (mdMatch) return mdMatch[1].trim();
+
+  // Fallback to simple URL match
   const match = content.match(/\*\*URL:\*\*\s*(https?:\/\/\S+)/i);
   return match ? match[1].trim() : null;
 }
@@ -117,7 +835,15 @@ function parseDraftAnswers(reportPath) {
     const questionText = lines[0].trim();
     
     // Extract the answer block, stripping blockquote brackets '>' and excess whitespace
-    const answerBody = lines.slice(1).join('\n').replace(/^>\s*/gm, '').trim();
+    let answerBody = lines.slice(1).join('\n').replace(/^>\s*/gm, '').trim();
+    
+    // Clean up draft response prefixes (e.g. "**Draft Response:**", "**Response:**", etc.)
+    answerBody = answerBody
+      .replace(/^\*\*Draft\s*Response:\*\*\s*/i, '')
+      .replace(/^\*\*Response:\*\*\s*/i, '')
+      .replace(/^Draft\s*Response:\s*/i, '')
+      .replace(/^Response:\s*/i, '')
+      .trim();
     
     if (questionText && answerBody) {
       answers.push({
@@ -143,7 +869,8 @@ function isChromeDebuggingActive() {
 function launchChromeOnMac() {
   return new Promise((resolve) => {
     console.log(`${colors.cyan}🚀 Launching Google Chrome with remote debugging on port 9222...${colors.reset}`);
-    const launchCmd = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --restore-last-session > /dev/null 2>&1 &`;
+    const profilePath = join(projectRoot, 'scratch', 'chrome-profile');
+    const launchCmd = `/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --user-data-dir="${profilePath}" --restore-last-session > /dev/null 2>&1 &`;
     exec(launchCmd, (err) => {
       if (err) {
         console.error(`${colors.red}Failed to run launch command: ${err.message}${colors.reset}`);
@@ -193,6 +920,7 @@ async function main() {
   let argId = null;
   let argStatus = null;
   let nonInteractive = false;
+  let argSubmit = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--id') {
@@ -203,6 +931,8 @@ async function main() {
       i++;
     } else if (args[i] === '--non-interactive') {
       nonInteractive = true;
+    } else if (args[i] === '--submit') {
+      argSubmit = true;
     } else if (!isNaN(parseInt(args[i]))) {
       argId = args[i];
     }
@@ -275,6 +1005,8 @@ async function main() {
   }
   const jobUrl = parseJobUrl(app.reportPath);
   const customAnswers = parseDraftAnswers(app.reportPath);
+  const profile = loadProfile();
+  const resumePath = findLatestResume();
 
   if (!jobUrl) {
     console.error(`${colors.red}Error: Could not extract job URL from report ${app.reportPath}${colors.reset}`);
@@ -328,17 +1060,59 @@ async function main() {
 
   let browser;
   try {
-    browser = await chromium.connectOverCDP('http://localhost:9222');
+    browser = await chromium.connectOverCDP('http://localhost:9222', { noDefaults: true });
     const contexts = browser.contexts();
     if (contexts.length === 0) {
       throw new Error('No active Chrome profiles/contexts found.');
     }
     const context = contexts[0];
-    const page = await context.newPage();
+    const pages = context.pages();
+    let page = null;
+    
+    // Normalize url for comparison
+    // Force a fresh tab to avoid any locked or paused states in existing tabs
+    /*
+    const normJobUrl = jobUrl.toLowerCase().split('?')[0].replace(/\/$/, '');
+    for (const p of pages) {
+      try {
+        const u = p.url().toLowerCase().split('?')[0].replace(/\/$/, '');
+        if (u.includes(normJobUrl) || normJobUrl.includes(u)) {
+          console.log(`${colors.green}✅ Found an existing tab open with this job URL! Attaching to it...${colors.reset}`);
+          page = p;
+          break;
+        }
+      } catch (err) {
+        // Ignore page errors
+      }
+    }
+    */
 
-    console.log(`${colors.cyan}Navigating to job application page...${colors.reset}`);
-    await page.goto(jobUrl, { waitUntil: 'domcontentloaded' });
-    console.log(`${colors.green}Page loaded successfully!${colors.reset}`);
+    if (!page) {
+      console.log(`${colors.cyan}No existing tab found for this URL. Creating a new tab...${colors.reset}`);
+      page = await context.newPage();
+      console.log(`${colors.cyan}Navigating to job application page...${colors.reset}`);
+      await page.goto(jobUrl, { waitUntil: 'domcontentloaded' });
+      console.log(`${colors.green}Page loaded successfully!${colors.reset}`);
+    } else {
+      // Bring tab to front
+      try {
+        await page.bringToFront();
+      } catch (e) {
+        // Ignore errors bringing to front
+      }
+    }
+
+    // Click Apply button if present to scroll/reveal the form
+    try {
+      const applyBtn = page.locator('button:has-text("Apply"), a:has-text("Apply"), [class*="apply-button"]').first();
+      if (await applyBtn.isVisible()) {
+        console.log(`${colors.cyan}🤖 Found an "Apply" button. Clicking to scroll/reveal the form...${colors.reset}`);
+        await applyBtn.click();
+        await page.waitForTimeout(1500); // Wait for transition/scroll/render
+      }
+    } catch (e) {
+      console.log(`${colors.dim}Note: Could not click Apply button automatically: ${e.message}${colors.reset}`);
+    }
 
     // Print draft answers in high contrast for the user
     if (customAnswers.length > 0) {
@@ -350,86 +1124,10 @@ async function main() {
         console.log(`${colors.bright}${colors.green}A: "${item.answer}"${colors.reset}`);
       }
       console.log(`============================================================\n`);
-
-      console.log(`${colors.cyan}🤖 Attempting to match and auto-inject answers into custom form fields...${colors.reset}`);
-      
-      // Inject script to match labels/fields and fill them
-      const matchStats = await page.evaluate((answers) => {
-        let matchedCount = 0;
-        const inputs = Array.from(document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]'));
-        const logs = [];
-
-        for (const input of inputs) {
-          let labelText = '';
-          
-          if (input.id) {
-            const label = document.querySelector(`label[for="${input.id}"]`);
-            if (label) labelText = label.innerText;
-          }
-          
-          if (!labelText) {
-            const parentLabel = input.closest('label');
-            if (parentLabel) labelText = parentLabel.innerText;
-          }
-          
-          if (!labelText) {
-            const container = input.closest('.field, .question, .form-group, [class*="field"], [class*="question"]');
-            if (container) {
-              const titleEl = container.querySelector('label, .label, .title, h1, h2, h3, h4, span');
-              if (titleEl) labelText = titleEl.innerText;
-            }
-          }
-          
-          if (!labelText) {
-            const previousEl = input.previousElementSibling;
-            if (previousEl) labelText = previousEl.innerText || previousEl.textContent;
-          }
-
-          if (!labelText) continue;
-          
-          const cleanLabel = labelText.toLowerCase().trim();
-          
-          for (const item of answers) {
-            const cleanQuestion = item.question.toLowerCase();
-            const words = cleanQuestion.split(/[^a-z0-9]+/).filter(w => w.length > 4);
-            let matchCount = 0;
-            
-            for (const word of words) {
-              if (cleanLabel.includes(word)) {
-                matchCount++;
-              }
-            }
-            
-            if (
-              cleanLabel.includes(cleanQuestion) || 
-              cleanQuestion.includes(cleanLabel) || 
-              (words.length > 0 && matchCount >= Math.min(2, words.length))
-            ) {
-              // Populate input value
-              if (input.tagName.toLowerCase() === 'input' || input.tagName.toLowerCase() === 'textarea') {
-                input.value = item.answer;
-              } else if (input.getAttribute('contenteditable') === 'true') {
-                input.innerText = item.answer;
-              }
-              
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-              logs.push(`Matched question keyword in label: "${labelText.trim().substring(0, 40)}..."`);
-              matchedCount++;
-              break;
-            }
-          }
-        }
-        return { matchedCount, logs };
-      }, customAnswers);
-
-      if (matchStats.matchedCount > 0) {
-        console.log(`${colors.green}✅ Auto-injected ${matchStats.matchedCount} custom answer(s)!${colors.reset}`);
-        matchStats.logs.forEach(log => console.log(`   - ${log}`));
-      } else {
-        console.log(`${colors.dim}No exact matching custom text areas found. They have been printed above for your manual pasting.${colors.reset}`);
-      }
     }
+
+    // Run unified visual form autofill engine
+    await autofillForm(page, profile, resumePath, customAnswers);
 
     // Try clicking Simplify button if present
     try {
@@ -443,6 +1141,44 @@ async function main() {
       }
     } catch (e) {
       // Ignore click failures
+    }
+
+    if (argSubmit) {
+      console.log(`\n${colors.bright}${colors.bgMagenta}🚀 USER OVERRIDE: Submitting application...${colors.reset}`);
+      try {
+        // Find submit button
+        const submitBtn = page.locator('button:has-text("Submit application"), button:has-text("Submit Application"), [id*="submit-button"], [id*="submit_app"]').first();
+        if (await submitBtn.count() > 0 && await submitBtn.first().isVisible()) {
+          console.log(`${colors.cyan}🤖 Found submit button with text: "${await submitBtn.first().innerText()}"${colors.reset}`);
+          console.log(`${colors.yellow}Clicking submit...${colors.reset}`);
+          await submitBtn.first().click();
+          console.log(`${colors.green}✅ Clicked submit! Waiting 5s for page transition/confirmation...${colors.reset}`);
+          await page.waitForTimeout(5000);
+          
+          // Verify if submitted successfully
+          const currentUrl = page.url();
+          const currentTitle = await page.title();
+          console.log(`Current URL: ${currentUrl}`);
+          console.log(`Current Title: ${currentTitle}`);
+          
+          if (currentUrl.includes('confirmation') || currentUrl.includes('thank-you') || currentUrl.includes('thanks') || currentTitle.toLowerCase().includes('thank') || currentTitle.toLowerCase().includes('success')) {
+            console.log(`\n${colors.bright}${colors.green}🎉 Application submitted successfully!${colors.reset}`);
+            // Automatically mark as Applied in tracker
+            const ok = updateApplicationStatus(app.id, 'Applied');
+            if (ok) console.log(`${colors.green}🎉 Successfully marked application #${app.id} as "Applied"!${colors.reset}`);
+          } else {
+            console.log(`\n${colors.yellow}⚠️ Application click executed. Please double check your Chrome browser tab to ensure no validation errors occurred.${colors.reset}`);
+            console.log(`If it submitted successfully, run:\n    node scratch/apply_automator.mjs --id ${app.id} --status Applied`);
+          }
+        } else {
+          console.error(`${colors.red}Error: Could not locate a visible Submit button on the page.${colors.reset}`);
+        }
+      } catch (submitErr) {
+        console.error(`${colors.red}Error during submit: ${submitErr.message}${colors.reset}`);
+      }
+      
+      await browser.close();
+      return;
     }
 
     console.log(`\n============================================================`);
@@ -459,8 +1195,7 @@ async function main() {
       console.log(`Please complete and submit the application in Google Chrome.`);
       console.log(`Once submitted, you can update the tracker status by running:`);
       console.log(`\n    node scratch/apply_automator.mjs --id ${app.id} --status Applied\n`);
-      await browser.close();
-      return;
+      process.exit(0);
     }
 
     // Let user complete and decide status
@@ -489,7 +1224,16 @@ async function main() {
 
   } catch (error) {
     console.error(`${colors.red}Playwright/CDP Error: ${error.message}${colors.reset}`);
-    if (browser) await browser.close();
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeErr) {
+        // ignore
+      }
+    }
+    if (nonInteractive) {
+      process.exit(1);
+    }
     await askQuestion('\nPress [Enter] to return to the main dashboard...');
     main();
   }

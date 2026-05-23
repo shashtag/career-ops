@@ -35,7 +35,7 @@ async function main() {
     <div class="job">
       <div class="job-header">
         <span class="job-company">realfast.ai</span>
-        <span class="job-period">Mar 2025 - Present</span>
+        <span class="job-period">Mar 2026 - Present</span>
       </div>
       <div class="job-role">Forward Deployed Engineer</div>
       <ul>
@@ -47,7 +47,7 @@ async function main() {
     <div class="job">
       <div class="job-header">
         <span class="job-company">Accenture (Comcast Engineering Team)</span>
-        <span class="job-period">Nov 2023 - Feb 2025</span>
+        <span class="job-period">Nov 2023 - Feb 2026</span>
       </div>
       <div class="job-role">Advanced Software Engineer</div>
       <ul>
@@ -97,10 +97,10 @@ async function main() {
     '{{EDUCATION}}': `
     <div class="edu-item">
       <div class="edu-header">
-        <span class="edu-title">Bachelor of Technology (B.Tech)</span>
-        <span class="edu-org">Vellore Institute of Technology (VIT)</span>
-        <span class="edu-year">Graduated 2021</span>
+        <span class="edu-title">B-Tech in Computer Science and Engineering</span>
+        <span class="edu-org">Vellore Institute of Technology, Vellore</span>
       </div>
+      <div class="edu-desc"><strong>Relevant Coursework:</strong> Data Structures and Algorithms, Distributed Systems, Operating Systems, Computer Networks, Computer Architecture, Discrete Math, AI/ML.</div>
     </div>
     `,
     '{{SECTION_SKILLS}}': 'Skills',
@@ -122,10 +122,11 @@ async function main() {
   }
 
   // Remove Certifications section since Shashwat doesn't have certifications listed
-  const certSectionRegex = /<!-- CERTIFICATIONS -->[\s\S]*?<div class="section avoid-break">[\s\S]*?<\/div>/i;
+  const certSectionRegex = /<!-- CERTIFICATIONS_START -->[\s\S]*?<!-- CERTIFICATIONS_END -->/i;
   html = html.replace(certSectionRegex, '');
-  // Also clean up any loose placeholder or unrendered divs
-  html = html.replace(/<div class="section avoid-break">\s*<div class="section-title">\{\{SECTION_CERTIFICATIONS\}\}<\/div>[\s\S]*?<\/div>/i, '');
+
+  // Keep Education section and cleanly strip the comment markers
+  html = html.replace(/<!-- EDUCATION_START -->/i, '').replace(/<!-- EDUCATION_END -->/i, '');
 
   // Inject compact styles to fit precisely on one page
   const compactStyles = `

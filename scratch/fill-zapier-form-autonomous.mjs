@@ -1,9 +1,7 @@
-import { chromium } from 'playwright';
-import readline from 'readline';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { fileURLToPath } from 'url';
+import { join, dirname } from 'path';
 
-const projectRoot = '/Users/shashwatguta/Desktop/career-ops';
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Safely update application status in applications.md
 function updateApplicationStatus(id, newStatus) {
@@ -36,7 +34,7 @@ function updateApplicationStatus(id, newStatus) {
 }
 
 async function main() {
-  const resumePath = '/Users/shashwatguta/Desktop/career-ops/output/cv-shashwat-gupta-zapier-2026-05-23.pdf';
+  const resumePath = join(projectRoot, 'output', 'cv-shashwat-gupta-zapier-2026-05-23.pdf');
   if (!existsSync(resumePath)) {
     console.error(`Error: Resume file not found at ${resumePath}`);
     return;

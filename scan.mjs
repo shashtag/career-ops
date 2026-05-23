@@ -175,22 +175,16 @@ export function buildLocationFilter(locationFilter) {
 
 // ── Dedup ───────────────────────────────────────────────────────────
 
-function loadSeenUrls() {
+function loadSeenUrls({ ignoreCache = false } = {}) {
   const seen = new Set();
-
-  // scan-history.tsv
-  if (existsSync(SCAN_HISTORY_PATH)) {
-    const lines = readFileSync(SCAN_HISTORY_PATH, 'utf-8').split('\n');
-    for (const line of lines.slice(1)) { // skip header
-      const url = line.split('\t')[0];
-      if (url) seen.add(url);
-    }
-  }
+  const activeUrls = new Set();
+  const completedUrls = new Set();
 
   // pipeline.md — extract URLs from checkbox lines
   if (existsSync(PIPELINE_PATH)) {
     const text = readFileSync(PIPELINE_PATH, 'utf-8');
     for (const match of text.matchAll(/- \[[ x]\] (https?:\/\/\S+)/g)) {
+      activeUrls.add(match[1]);
       seen.add(match[1]);
     }
   }
@@ -199,7 +193,43 @@ function loadSeenUrls() {
   if (existsSync(APPLICATIONS_PATH)) {
     const text = readFileSync(APPLICATIONS_PATH, 'utf-8');
     for (const match of text.matchAll(/https?:\/\/[^\s|)]+/g)) {
+      completedUrls.add(match[0]);
       seen.add(match[0]);
+    }
+  }
+
+  if (ignoreCache) {
+    console.log('ℹ️  Bypassing scan history cache (--ignore-cache / --force is active).');
+    return seen;
+  }
+
+  // scan-history.tsv
+  if (existsSync(SCAN_HISTORY_PATH)) {
+    const lines = readFileSync(SCAN_HISTORY_PATH, 'utf-8').split('\n');
+    let orphanCount = 0;
+    for (const line of lines.slice(1)) { // skip header
+      if (!line.trim()) continue;
+      const parts = line.split('\t');
+      const url = parts[0];
+      if (!url) continue;
+
+      const status = parts[5] ? parts[5].trim() : '';
+
+      if (status.startsWith('skipped_')) {
+        // Explicitly verified dead/invalid postings should always be skipped to avoid re-verifying
+        seen.add(url);
+      } else {
+        // Status is 'added' or legacy (blank/undefined)
+        // Only treat as seen if it's currently active or completed
+        if (activeUrls.has(url) || completedUrls.has(url)) {
+          seen.add(url);
+        } else {
+          orphanCount++;
+        }
+      }
+    }
+    if (orphanCount > 0) {
+      console.log(`ℹ️  Detected ${orphanCount} orphaned scan-history cache entries (missing from pipeline.md and applications.md). Bypassing cache for these to allow re-discovery.`);
     }
   }
 
@@ -378,6 +408,7 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
   const verify = args.includes('--verify');
+  const ignoreCache = args.includes('--ignore-cache') || args.includes('--force');
   const companyFlag = args.indexOf('--company');
   const filterCompany = companyFlag !== -1 ? args[companyFlag + 1]?.toLowerCase() : null;
 
@@ -422,7 +453,7 @@ async function main() {
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 4. Load dedup sets
-  const seenUrls = loadSeenUrls();
+  const seenUrls = loadSeenUrls({ ignoreCache });
   const seenCompanyRoles = loadSeenCompanyRoles();
 
   // 5. Fetch from each target
