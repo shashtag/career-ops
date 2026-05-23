@@ -325,8 +325,8 @@ for (const file of tsvFiles) {
   }
 
   if (!duplicate) {
-    // Exact entry number match
-    duplicate = existingApps.find(app => app.num === addition.num);
+    // Exact entry number match (only if same company!)
+    duplicate = existingApps.find(app => app.num === addition.num && normalizeCompany(app.company) === normalizeCompany(addition.company));
   }
 
   if (!duplicate) {
@@ -334,6 +334,9 @@ for (const file of tsvFiles) {
     const normCompany = normalizeCompany(addition.company);
     duplicate = existingApps.find(app => {
       if (normalizeCompany(app.company) !== normCompany) return false;
+      // If they both have report numbers and they are different, they are NOT duplicates
+      const existingReportNum = extractReportNum(app.report);
+      if (reportNum && existingReportNum && reportNum !== existingReportNum) return false;
       return roleFuzzyMatch(addition.role, app.role);
     });
   }
