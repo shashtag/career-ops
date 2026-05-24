@@ -14,3 +14,12 @@
 - **Greenhouse & Generic Labels:** On boards like Greenhouse, the `<input type="file">` for resumes is often visually wrapped in parent/sibling containers labeled simply as `"Attach"`.
 - **Attribute-Based Guard:** To identify the resume field robustly, check `id` and `name` attributes (e.g. matching `resume` or `cv` keywords) rather than just looking at the resolved text label.
 - **Exclusion Filter:** Ensure cover-letter fields are explicitly filtered out (e.g., ignoring fields containing the keyword `cover`) to avoid mis-uploading the resume to the wrong slot.
+
+### 4. Markdown Stripping for Form Inputs
+- **Plain-Text Constraints:** Job board textareas do not parse or render markdown, leaving asterisks (`**`), backticks, and list dashes looking messy and unformatted.
+- **Format Normalization:** Always strip markdown formatting from drafted answers before injection. Use plain capitalized headings (e.g., `GO (GOLANG):`) and double line breaks instead of lists and bold tags to structure answers beautifully.
+
+### 5. Playwright CDP Client Detachment
+- **TypeError Guard:** Playwright's `chromium.connectOverCDP` does not support `.disconnect()` on the browser instance, and calling it throws a `TypeError`.
+- **Clean Exit:** Use `browser.close()` (which cleanly closes the CDP socket connection without closing the remote browser process itself when connected over CDP) or allow the Node process to exit naturally.
+
