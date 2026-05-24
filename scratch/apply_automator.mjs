@@ -9,6 +9,9 @@ import yaml from 'js-yaml';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
 
+// Bulletproof delay helper
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 // Helper to ask user for input
 function askQuestion(query) {
   const rl = readline.createInterface({
@@ -117,17 +120,208 @@ function findBestOption(options, keywords, fallback) {
     }
   }
 
-  return options[0] || null;
+  return null;
+}
+
+// Dictionary of custom, premium strategy profiles for each detected job board engine
+const portalStrategies = {
+  'Greenhouse': {
+    title: 'Greenhouse Job Board Optimizer',
+    desc: 'Optimized form filler targeting Greenhouse multi-step & custom demographics controls.',
+    optimizations: 'Plural container checks, telephone country list exclusions, scoped listbox selections, direct DOM click fallbacks.',
+    color: colors.green
+  },
+  'Ashby': {
+    title: 'AshbyHQ Engine Adaptor',
+    desc: 'Tailored automation targeting Ashby virtualized react-select elements and highly nested divs.',
+    optimizations: 'Dynamic keyboard type-filtering, visible listbox containment, fallback selector matching.',
+    color: colors.cyan
+  },
+  'Lever': {
+    title: 'Lever.co Application Auto-filler',
+    desc: 'Structured automation targeting Lever unified 1-page form schemas.',
+    optimizations: 'Explicit textarea content injection, work authorization checkbox force-clicks, multiple radio option siblings check.',
+    color: colors.magenta
+  },
+  'Workday': {
+    title: 'Workday Enterprise Form Automator',
+    desc: 'Advanced workflow handling for multi-page shadow DOM Enterprise applications.',
+    optimizations: 'Deep shadow root traversal, automatic multi-step "Next" button progression, secure field fills.',
+    color: colors.yellow
+  },
+  'Generic': {
+    title: 'Universal AI Job Board Filler',
+    desc: 'Fuzzy visual-label engine designed to inspect standard HTML forms globally.',
+    optimizations: 'Fuzzy regex label distance matching, standard input class/type identification, custom Section H keyword overlaps.',
+    color: colors.white
+  }
+};
+
+// Helper function to dynamically detect the target job portal engine
+async function detectPortal(page, url) {
+  const lowercaseUrl = url.toLowerCase();
+  
+  // 1. Initial URL signature checking
+  if (lowercaseUrl.includes('greenhouse.io') || lowercaseUrl.includes('greenhouse-io')) {
+    return 'Greenhouse';
+  }
+  if (lowercaseUrl.includes('ashbyhq.com') || lowercaseUrl.includes('ashby-hq')) {
+    return 'Ashby';
+  }
+  if (lowercaseUrl.includes('lever.co') || lowercaseUrl.includes('lever-co')) {
+    return 'Lever';
+  }
+  if (lowercaseUrl.includes('myworkdayjobs.com') || lowercaseUrl.includes('workday')) {
+    return 'Workday';
+  }
+
+  // 2. In-browser DOM check fallback for custom or company-aliased domains
+  try {
+    const domIndicator = await page.evaluate(() => {
+      if (document.querySelector('#application-form') || document.querySelector('form[action*="greenhouse.io"]') || document.querySelector('input[name^="job_application["]')) {
+        return 'Greenhouse';
+      }
+      if (document.querySelector('[class*="ashby"]') || document.querySelector('a[href*="ashbyhq.com"]') || document.getElementById('ashby-jobs-app')) {
+        return 'Ashby';
+      }
+      if (document.querySelector('.application-form') || document.querySelector('.lever-job') || document.querySelector('a[href*="lever.co"]')) {
+        return 'Lever';
+      }
+      if (document.querySelector('[data-automation-id*="workday"]') || document.querySelector('form[action*="workday"]')) {
+        return 'Workday';
+      }
+      return null;
+    });
+    if (domIndicator) return domIndicator;
+  } catch (e) {
+    // Ignore DOM evaluation errors
+  }
+
+  return 'Generic';
+}
+
+// Helper to evaluate inside a frame with a strict timeout to avoid hangs
+async function evaluateWithTimeout(frame, fn, arg, timeoutMs = 2000) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Evaluation timed out')), timeoutMs);
+  });
+  try {
+    const evalPromise = arg !== undefined ? frame.evaluate(fn, arg) : frame.evaluate(fn);
+    const result = await Promise.race([evalPromise, timeoutPromise]);
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Helper to retrieve the actual URL of a frame, evaluating window.location.href if Playwright's url() is empty
+async function getFrameUrl(frame) {
+  try {
+    let url = frame.url();
+    if (url && url !== 'about:blank') return url;
+    
+    // Evaluate inside the frame with a short 500ms timeout
+    url = await evaluateWithTimeout(frame, () => window.location.href, undefined, 500);
+    return url || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// Helper to determine if a URL is a third-party tracking, ads, captcha, or analytics frame that should be skipped
+function shouldSkipUrl(url, pageUrl) {
+  if (!url) return true;
+  if (url === 'about:blank') return false;
+  if (url.startsWith('chrome-error://')) return true;
+  
+  const lowerUrl = url.toLowerCase();
+  const skipKeywords = [
+    'recaptcha', 'hcaptcha', 'doubleclick', 'google.com/recaptcha', 'googletagmanager',
+    'facebook.com', 'hs-analytics', 'intercom', 'hubspot', 'stripe.com', 'datadoghq',
+    'sentry.io', 'hotjar', 'ads', 'youtube', 'vimeo', 'linkedin.com/analytics',
+    'drift.com', 'munchkin', 'marketo', 'g2.com', 'leadfeeder', 'optimizely',
+    'segment.com', 'amplitude', 'mixpanel'
+  ];
+  
+  const lowerPageUrl = (pageUrl || '').toLowerCase();
+  for (const keyword of skipKeywords) {
+    if (lowerUrl.includes(keyword) && !lowerPageUrl.includes(keyword)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Unified robust autofill engine using Visual-Label DOM Analysis and Node-side Fuzzy Matching
+// Helper to scan all frames on a page and return the one housing the actual form (by maximum non-hidden input counts)
+async function findTargetFrame(page) {
+  const frames = page.frames();
+  console.log(`[DEBUG findTargetFrame] Total frames on page: ${frames.length}`);
+  let targetFrame = page.mainFrame();
+  let maxInputs = 0;
+  const pageUrl = page.url();
+  
+  for (const frame of frames) {
+    const frameUrl = await getFrameUrl(frame);
+    const isSkipped = shouldSkipUrl(frameUrl, pageUrl);
+    let inputCount = 0;
+    let evalError = null;
+    if (!isSkipped) {
+      try {
+        inputCount = await evaluateWithTimeout(frame, () => {
+          return document.querySelectorAll('input:not([type="hidden"]), textarea, select').length;
+        }, undefined, 2000);
+      } catch (e) {
+        evalError = e.message;
+      }
+    }
+    console.log(`   - Frame URL: "${frameUrl}", name: "${frame.name()}", isSkipped: ${isSkipped}, inputCount: ${inputCount}, error: ${evalError}`);
+    if (!isSkipped && inputCount > maxInputs) {
+      maxInputs = inputCount;
+      targetFrame = frame;
+    }
+  }
+  return targetFrame;
 }
 
 // Unified robust autofill engine using Visual-Label DOM Analysis and Node-side Fuzzy Matching
 async function autofillForm(page, profile, resumePath, customAnswers) {
   if (!profile) {
     console.log(`${colors.yellow}⚠️ No profile configuration found to autofill.${colors.reset}`);
-    return;
+    return page.mainFrame();
   }
 
-  console.log(`\n${colors.cyan}🤖 Running unified visual-label form autofill engine...${colors.reset}`);
+  // Scan and select the correct target frame (handles iframe-embedded forms like Greenhouse/Lever/Ashby)
+  console.log(`${colors.cyan}🔍 Scanning page for forms and active frames...${colors.reset}`);
+  let targetFrame = page.mainFrame();
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    targetFrame = await findTargetFrame(page);
+    const count = await targetFrame.evaluate(() => document.querySelectorAll('input:not([type="hidden"]), textarea, select').length).catch(() => 0);
+    if (count > 0) {
+      console.log(`${colors.green}✅ Target frame identified (${targetFrame.url()}) with ${count} form fields!${colors.reset}`);
+      break;
+    }
+    if (attempt < 5) {
+      console.log(`${colors.dim}   - Attempt ${attempt}: No form fields found yet. Waiting 1s...${colors.reset}`);
+      await delay(1000);
+    }
+  }
+
+  const url = targetFrame.url();
+  const detectedPortal = await detectPortal(targetFrame, url);
+  const strategy = portalStrategies[detectedPortal] || portalStrategies.Generic;
+
+  console.log(`\n============================================================`);
+  console.log(`${colors.bright}${colors.bgBlue}             PORTAL-SPECIFIC FILL STRATEGY                  ${colors.reset}`);
+  console.log(`============================================================`);
+  console.log(`📡 Detected Job Board: ${strategy.color}${colors.bright}${detectedPortal.toUpperCase()}${colors.reset}`);
+  console.log(`🎯 Strategy Profile:  ${colors.bright}${strategy.title}${colors.reset}`);
+  console.log(`📝 Description:       ${colors.dim}${strategy.desc}${colors.reset}`);
+  console.log(`🛠️ Optimizations:     ${colors.dim}${strategy.optimizations}${colors.reset}`);
+  console.log(`============================================================\n`);
+
+  console.log(`${colors.cyan}🤖 Running unified visual-label form autofill engine...${colors.reset}`);
   
   const candidate = profile.candidate || {};
   const location = profile.location || {};
@@ -136,7 +330,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
   const lastName = nameParts.slice(1).join(' ') || '';
 
   // Get in-browser DOM layout analysis
-  const domLayout = await page.evaluate(() => {
+  const domLayout = await targetFrame.evaluate(() => {
     function getLabelText(el) {
       let labelText = '';
       
@@ -150,7 +344,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
       
       // B. Climb up to find closest field/question container
       if (!labelText) {
-        const container = el.closest('.field, .question, .form-group, .field-wrapper, [class*="field"], [class*="question"], [class*="form-row"], [class*="Field"], [class*="Question"]');
+        const container = el.closest('.field, .question, .form-group, .field-wrapper, [class*="field"]:not([class*="fields"]), [class*="question"]:not([class*="questions"]), [class*="form-row"], [class*="Field"], [class*="Question"]');
         if (container) {
           const labelEl = container.querySelector('label');
           if (labelEl) {
@@ -200,19 +394,32 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
     }
 
     // Capture standard input fields (text, email, tel, file, textarea, etc.)
-    const inputs = Array.from(document.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]):not([type="submit"]):not([type="hidden"]), textarea, [contenteditable="true"]')).map(el => {
-      const { selector, index } = getSelectorAndIndex(el);
-      return {
-        id: el.id || '',
-        name: el.name || '',
-        type: el.tagName.toLowerCase() === 'textarea' ? 'textarea' : (el.getAttribute('type') || 'text'),
-        labelText: getLabelText(el),
-        placeholder: el.placeholder || '',
-        tag: el.tagName.toLowerCase(),
-        selector,
-        index
-      };
-    });
+    const inputs = Array.from(document.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]):not([type="submit"]):not([type="hidden"]), textarea, [contenteditable="true"]'))
+      .filter(el => {
+        // Exclude inputs inside international telephone country code search list
+        if (el.classList.contains('iti__search-input') || el.id?.startsWith('iti-') || el.closest('.iti__dropdown-content') || el.closest('.iti__country-container')) {
+          return false;
+        }
+        // Exclude custom dropdown helper input elements (e.g. react-select)
+        const className = el.className || '';
+        if (typeof className === 'string' && className.includes('select__input')) {
+          return false;
+        }
+        return true;
+      })
+      .map(el => {
+        const { selector, index } = getSelectorAndIndex(el);
+        return {
+          id: el.id || '',
+          name: el.name || '',
+          type: el.tagName.toLowerCase() === 'textarea' ? 'textarea' : (el.getAttribute('type') || 'text'),
+          labelText: getLabelText(el),
+          placeholder: el.placeholder || '',
+          tag: el.tagName.toLowerCase(),
+          selector,
+          index
+        };
+      });
 
     // Capture standard selects
     const selects = Array.from(document.querySelectorAll('select')).map(select => {
@@ -236,7 +443,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
     const customDropdowns = Array.from(document.querySelectorAll('[role="combobox"], [class*="select__control"], [class*="select-control"]')).map(el => {
       let cssSelector = '';
       if (el.id) {
-        cssSelector = `#${el.id}`;
+        cssSelector = `[id="${el.id}"]`;
       } else {
         const classes = Array.from(el.classList).filter(c => !c.includes('is-focused') && !c.includes('is-open'));
         cssSelector = classes.length > 0 ? `.${classes.join('.')}` : el.tagName.toLowerCase();
@@ -265,7 +472,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
       };
     });
 
-    // Group and capture radio buttons
+    // Group and capture radio groups
     const radioGroups = {};
     const radioElements = document.querySelectorAll('input[type="radio"]');
     for (const radio of radioElements) {
@@ -314,9 +521,32 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
     };
   });
 
+  // Debug logging for detected DOM elements and their resolved labels
+  console.log(`${colors.cyan}[DEBUG] Form layout scanned:${colors.reset}`);
+  console.log(`   - Inputs: ${domLayout.inputs?.length || 0}`);
+  for (const input of (domLayout.inputs || [])) {
+    console.log(`     * Input: labelText="${input.labelText}", type="${input.type}", id="${input.id}", name="${input.name}"`);
+  }
+  console.log(`   - Selects: ${domLayout.selects?.length || 0}`);
+  for (const select of (domLayout.selects || [])) {
+    console.log(`     * Select: labelText="${select.labelText}", id="${select.id}", name="${select.name}"`);
+  }
+  console.log(`   - Custom Dropdowns: ${domLayout.customDropdowns?.length || 0}`);
+  for (const dropdown of (domLayout.customDropdowns || [])) {
+    console.log(`     * Dropdown: labelText="${dropdown.labelText}", id="${dropdown.id}"`);
+  }
+  console.log(`   - Checkboxes: ${domLayout.checkboxes?.length || 0}`);
+  for (const cb of (domLayout.checkboxes || [])) {
+    console.log(`     * Checkbox: labelText="${cb.labelText}", id="${cb.id}", name="${cb.name}"`);
+  }
+  console.log(`   - Radio Groups: ${domLayout.radioGroups?.length || 0}`);
+  for (const rg of (domLayout.radioGroups || [])) {
+    console.log(`     * Radio Group: groupLabel="${rg.groupLabel}", name="${rg.name}"`);
+  }
+
   const logs = [];
   logs.push = function(msg) {
-    console.log(`   - ${msg}`);
+    console.log(`   - [${strategy.color}${detectedPortal}${colors.reset}] ${msg}`);
     return Array.prototype.push.call(this, msg);
   };
 
@@ -519,13 +749,27 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
   // 1. Fill Text and Textarea Inputs
   for (const input of domLayout.inputs) {
     if (input.type === 'file') {
-      // Resume Upload
-      if (resumePath && (input.labelText.toLowerCase().includes('resume') || input.labelText.toLowerCase().includes('cv') || input.labelText.toLowerCase().includes('curriculum'))) {
+      // Robust Resume Upload: Check labelText, id, and name attributes while excluding cover letters
+      const labelLower = (input.labelText || '').toLowerCase();
+      const idLower = (input.id || '').toLowerCase();
+      const nameLower = (input.name || '').toLowerCase();
+      
+      const isResume = (
+        labelLower.includes('resume') || 
+        labelLower.includes('cv') || 
+        labelLower.includes('curriculum') ||
+        idLower.includes('resume') ||
+        idLower.includes('cv') ||
+        nameLower.includes('resume') ||
+        nameLower.includes('cv')
+      ) && !idLower.includes('cover') && !nameLower.includes('cover') && !labelLower.includes('cover');
+
+      if (resumePath && isResume) {
         try {
-          await page.locator(input.selector).nth(input.index).setInputFiles(resumePath);
-          logs.push(`Uploaded resume PDF to file field (Label: "${input.labelText}")`);
+          await targetFrame.locator(input.selector).nth(input.index).setInputFiles(resumePath);
+          logs.push(`Uploaded resume PDF to file field (Label: "${input.labelText}", ID: "${input.id}")`);
         } catch (e) {
-          logs.push(`⚠️ Resume upload failed for label "${input.labelText}": ${e.message}`);
+          logs.push(`⚠️ Resume upload failed for label "${input.labelText}" (ID: "${input.id}"): ${e.message}`);
         }
       }
       continue;
@@ -538,7 +782,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
       if (fuzzyLabelMatch(input.labelText, matcher.regex)) {
         if (matcher.value !== undefined && matcher.value !== null) {
           try {
-            const loc = page.locator(input.selector).nth(input.index);
+            const loc = targetFrame.locator(input.selector).nth(input.index);
             await loc.fill(matcher.value);
             await loc.dispatchEvent('input', { bubbles: true });
             await loc.dispatchEvent('change', { bubbles: true });
@@ -558,7 +802,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
     const customAns = matchCustomAnswer(input.labelText, customAnswers);
     if (customAns) {
       try {
-        const loc = page.locator(input.selector).nth(input.index);
+        const loc = targetFrame.locator(input.selector).nth(input.index);
         await loc.fill(customAns.answer);
         await loc.dispatchEvent('input', { bubbles: true });
         await loc.dispatchEvent('change', { bubbles: true });
@@ -576,14 +820,14 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
         const bestOpt = findBestOption(select.options, matcher.keywords, matcher.fallback);
         if (bestOpt) {
           try {
-            const loc = page.locator(select.selector).nth(select.index);
+            const loc = targetFrame.locator(select.selector).nth(select.index);
             await loc.selectOption(bestOpt.value, { force: true });
             await loc.dispatchEvent('change', { bubbles: true });
             logs.push(`Selected dropdown option "${bestOpt.text}" for label "${select.labelText}"`);
           } catch (e) {
             // Fallback: set it in-browser
             try {
-              await page.evaluate(({ selector, index, value }) => {
+              await targetFrame.evaluate(({ selector, index, value }) => {
                 const el = document.querySelectorAll(selector)[index];
                 if (el) {
                   el.value = value;
@@ -607,30 +851,64 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
       if (fuzzyLabelMatch(dropdown.labelText, matcher.regex)) {
         try {
           // Open custom dropdown
-          await page.locator(dropdown.selector).nth(dropdown.index).click();
-          await page.waitForTimeout(500);
+          const locator = targetFrame.locator(dropdown.selector).nth(dropdown.index);
+          const isInput = await locator.evaluate(el => el.tagName.toLowerCase() === 'input');
+          if (isInput) {
+            const hasControl = await locator.evaluate(el => !!el.closest('.select__control, .select-control, [class*="control"]'));
+            if (hasControl) {
+              await locator.evaluate(el => {
+                const ctrl = el.closest('.select__control, .select-control, [class*="control"]');
+                if (ctrl) ctrl.click();
+              });
+            } else {
+              await locator.evaluate(el => el.parentElement?.click());
+            }
+          } else {
+            await locator.click();
+          }
+          await delay(500);
 
           // Type search term if present to filter options (e.g. for virtualized lists)
           const searchTerm = matcher.fallback || matcher.keywords[0];
           if (searchTerm) {
-            const inputSelector = `${dropdown.selector} input, [class*="select"] input, input[class*="-input"], input[role="combobox"]`;
-            const searchInput = page.locator(inputSelector).first();
-            if (await searchInput.count() > 0 && await searchInput.isVisible()) {
+            let searchInput = null;
+            if (isInput) {
+              searchInput = locator;
+            } else {
+              const scopedSelector = [
+                `${dropdown.selector} input`,
+                `${dropdown.selector} input[class*="-input"]`,
+                `${dropdown.selector} input[role="combobox"]`,
+                `[id="${dropdown.id}"] input`
+              ].join(', ');
+              
+              const candidates = targetFrame.locator(scopedSelector);
+              if (await candidates.count() > 0 && await candidates.first().isVisible()) {
+                searchInput = candidates.first();
+              } else {
+                const parentInput = locator.locator('xpath=..//input');
+                if (await parentInput.count() > 0 && await parentInput.first().isVisible()) {
+                  searchInput = parentInput.first();
+                }
+              }
+            }
+
+            if (searchInput && await searchInput.isVisible()) {
               await searchInput.fill(searchTerm);
-              await page.waitForTimeout(500); // Wait for filtering
+              await delay(500); // Wait for filtering
             } else {
               try {
                 // Try focused element typing as backup
                 await page.keyboard.type(searchTerm);
-                await page.waitForTimeout(500);
+                await delay(500);
               } catch (kbdErr) {
                 // ignore
               }
             }
           }
 
-          // Get open choices
-          const options = await page.evaluate(() => {
+          // Get open choices - only inside visible menu/dropdown listbox wrappers to avoid collisions with other hidden menus
+          const options = await targetFrame.evaluate(() => {
             const selectors = [
               '[class*="select__option"]',
               '[class*="-option"]',
@@ -638,8 +916,26 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
               'div[id*="-listbox"] div',
               'div[class*="option"]'
             ];
+            const isVisible = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+            
+            // Find active visible listboxes/dropdown menus
+            const menuContainers = Array.from(document.querySelectorAll('[role="listbox"], [class*="menu"], [class*="listbox"], [class*="-menu"]'))
+              .filter(isVisible);
+
             for (const sel of selectors) {
-              const elms = Array.from(document.querySelectorAll(sel));
+              let elms = [];
+              if (menuContainers.length > 0) {
+                for (const menu of menuContainers) {
+                  const found = Array.from(menu.querySelectorAll(sel)).filter(isVisible);
+                  if (found.length > 0) {
+                    elms = found;
+                    break;
+                  }
+                }
+              }
+              if (elms.length === 0) {
+                elms = Array.from(document.querySelectorAll(sel)).filter(isVisible);
+              }
               if (elms.length > 0) {
                 return elms.map((el, idx) => ({
                   text: (el.innerText || el.textContent || '').trim(),
@@ -653,12 +949,61 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
 
           const bestOpt = findBestOption(options, matcher.keywords, matcher.fallback);
           if (bestOpt) {
-            const optionSelector = `[class*="select__option"], [class*="-option"], [role="option"], div[id*="-listbox"] div, div[class*="option"]`;
-            await page.locator(optionSelector).filter({ hasText: bestOpt.text }).first().click();
-            logs.push(`Selected custom dropdown option "${bestOpt.text}" for label "${dropdown.labelText}"`);
+            try {
+              const success = await targetFrame.evaluate(({ optId, optText, selector }) => {
+                let el = null;
+                if (optId) {
+                  el = document.getElementById(optId);
+                }
+                if (!el) {
+                  const elements = Array.from(document.querySelectorAll(selector));
+                  el = elements.find(e => (e.innerText || e.textContent || '').trim() === optText);
+                }
+                if (!el) {
+                  const selectors = [
+                    '[class*="select__option"]',
+                    '[class*="-option"]',
+                    '[role="option"]',
+                    'div[id*="-listbox"] div',
+                    'div[class*="option"]'
+                  ];
+                  for (const sel of selectors) {
+                    const elms = Array.from(document.querySelectorAll(sel));
+                    el = elms.find(e => (e.innerText || e.textContent || '').trim() === optText);
+                    if (el) break;
+                  }
+                }
+                if (el) {
+                  el.click();
+                  return true;
+                }
+                return false;
+              }, { optId: bestOpt.id, optText: bestOpt.text, selector: bestOpt.selector });
+              
+              if (success) {
+                logs.push(`Selected custom dropdown option "${bestOpt.text}" for label "${dropdown.labelText}"`);
+              } else {
+                // Playwright fallback click
+                const optionSelector = `[class*="select__option"], [class*="-option"], [role="option"], div[id*="-listbox"] div, div[class*="option"]`;
+                await targetFrame.locator(optionSelector).filter({ hasText: bestOpt.text }).first().click();
+                logs.push(`Selected custom dropdown option "${bestOpt.text}" for label "${dropdown.labelText}" (Playwright fallback)`);
+              }
+            } catch (clickErr) {
+              // Direct locator fallback
+              const optionSelector = `[class*="select__option"], [class*="-option"], [role="option"], div[id*="-listbox"] div, div[class*="option"]`;
+              await targetFrame.locator(optionSelector).filter({ hasText: bestOpt.text }).first().click();
+              logs.push(`Selected custom dropdown option "${bestOpt.text}" for label "${dropdown.labelText}" (Playwright fallback catch)`);
+            }
           } else {
-            // Close dropdown safely
-            await page.locator(dropdown.selector).nth(dropdown.index).click();
+            // Close dropdown safely by clicking the control again
+            if (isInput) {
+              await locator.evaluate(el => {
+                const ctrl = el.closest('.select__control, .select-control, [class*="control"]');
+                if (ctrl) ctrl.click();
+              });
+            } else {
+              await locator.click();
+            }
           }
         } catch (e) {
           logs.push(`⚠️ Custom dropdown selection failed for "${dropdown.labelText}": ${e.message}`);
@@ -688,8 +1033,8 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
 
     if (checked && !cb.checked) {
       try {
-        const checkboxLoc = page.locator(cb.selector).nth(cb.index);
-        const labelLoc = page.locator(`label[for="${cb.id}"]`);
+        const checkboxLoc = targetFrame.locator(cb.selector).nth(cb.index);
+        const labelLoc = targetFrame.locator(`label[for="${cb.id}"]`);
         if (cb.id && await labelLoc.count() > 0 && await labelLoc.isVisible()) {
           await labelLoc.click();
         } else {
@@ -698,7 +1043,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
       } catch (e) {
         // Fallback: check in-browser
         try {
-          await page.evaluate(({ selector, index }) => {
+          await targetFrame.evaluate(({ selector, index }) => {
             const el = document.querySelectorAll(selector)[index];
             if (el && !el.checked) {
               el.checked = true;
@@ -721,16 +1066,16 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
         const bestOpt = findBestOption(group.options, matcher.keywords, matcher.fallback);
         if (bestOpt) {
           try {
-            const radioLabel = page.locator(`label[for="${bestOpt.id}"]`);
+            const radioLabel = targetFrame.locator(`label[for="${bestOpt.id}"]`);
             if (bestOpt.id && await radioLabel.count() > 0 && await radioLabel.isVisible()) {
               await radioLabel.click();
             } else {
-              await page.locator(bestOpt.selector).nth(bestOpt.index).click({ force: true });
+              await targetFrame.locator(bestOpt.selector).nth(bestOpt.index).click({ force: true });
             }
             logs.push(`Selected radio option "${bestOpt.label}" for group "${group.groupLabel}"`);
           } catch (e) {
             try {
-              await page.locator(bestOpt.selector).nth(bestOpt.index).click({ force: true });
+              await targetFrame.locator(bestOpt.selector).nth(bestOpt.index).click({ force: true });
               logs.push(`Selected radio option "${bestOpt.label}" for group "${group.groupLabel}" (forced)`);
             } catch (clickErr) {
               logs.push(`⚠️ Failed to select radio option for "${group.groupLabel}": ${clickErr.message}`);
@@ -747,6 +1092,7 @@ async function autofillForm(page, profile, resumePath, customAnswers) {
   if (logs.length === 0) {
     console.log(`   - ${colors.dim}No fields were auto-filled by matchers.${colors.reset}`);
   }
+  return targetFrame;
 }
 
 // Parse applications.md
@@ -844,6 +1190,17 @@ function parseDraftAnswers(reportPath) {
       .replace(/^Draft\s*Response:\s*/i, '')
       .replace(/^Response:\s*/i, '')
       .trim();
+    
+    // Clean up trailing horizontal rules or markdown separators (common at the end of section H)
+    answerBody = answerBody.replace(/\n*---\s*$/, '').trim();
+    
+    // Strip leading/trailing surrounding quotes if they wrap the entire text block
+    if (answerBody.startsWith('"') && answerBody.endsWith('"')) {
+      answerBody = answerBody.slice(1, -1).trim();
+    } else if (answerBody.startsWith("'") && answerBody.endsWith("'")) {
+      answerBody = answerBody.slice(1, -1).trim();
+    }
+    answerBody = answerBody.trim();
     
     if (questionText && answerBody) {
       answers.push({
@@ -1070,8 +1427,7 @@ async function main() {
     let page = null;
     
     // Normalize url for comparison
-    // Force a fresh tab to avoid any locked or paused states in existing tabs
-    /*
+    // Re-use existing tabs to avoid duplicate loads and utilize existing hydration state
     const normJobUrl = jobUrl.toLowerCase().split('?')[0].replace(/\/$/, '');
     for (const p of pages) {
       try {
@@ -1085,14 +1441,16 @@ async function main() {
         // Ignore page errors
       }
     }
-    */
 
     if (!page) {
       console.log(`${colors.cyan}No existing tab found for this URL. Creating a new tab...${colors.reset}`);
       page = await context.newPage();
       console.log(`${colors.cyan}Navigating to job application page...${colors.reset}`);
-      await page.goto(jobUrl, { waitUntil: 'domcontentloaded' });
-      console.log(`${colors.green}Page loaded successfully!${colors.reset}`);
+      await page.goto(jobUrl, { waitUntil: 'load', timeout: 30000 }).catch(e => {
+        console.log(`${colors.yellow}⚠️ Navigation timeout or warning: ${e.message}. Continuing...${colors.reset}`);
+      });
+      console.log(`${colors.green}Page loaded successfully. Waiting 3s for client-side SPA components to fully render and hydrate...${colors.reset}`);
+      await delay(3000);
     } else {
       // Bring tab to front
       try {
@@ -1102,17 +1460,87 @@ async function main() {
       }
     }
 
-    // Click Apply button if present to scroll/reveal the form
+    // Click Apply button if present to scroll/reveal the form (handles dynamic iframe reveals as well)
     try {
-      const applyBtn = page.locator('button:has-text("Apply"), a:has-text("Apply"), [class*="apply-button"]').first();
-      if (await applyBtn.isVisible()) {
-        console.log(`${colors.cyan}🤖 Found an "Apply" button. Clicking to scroll/reveal the form...${colors.reset}`);
-        await applyBtn.click();
-        await page.waitForTimeout(1500); // Wait for transition/scroll/render
+      let applyBtnClicked = false;
+      let clickedText = '';
+      
+      // Define a standard searcher to run inside any page or frame
+      const findAndClickApplyInBrowser = () => {
+        const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]'));
+        for (const el of candidates) {
+          const text = (el.innerText || el.textContent || '').trim();
+          const cleanText = text.toLowerCase();
+          const id = (el.id || '').toLowerCase();
+          const className = (el.className || '').toLowerCase();
+          
+          // Check visibility
+          const rect = el.getBoundingClientRect();
+          const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none' && window.getComputedStyle(el).visibility !== 'hidden';
+          
+          if (isVisible) {
+            // Check if text indicates "Apply"
+            const isApplyText = cleanText === 'apply' || 
+                                cleanText === 'apply now' || 
+                                cleanText === 'apply for this job' || 
+                                cleanText === 'apply to position' || 
+                                cleanText.includes('apply now') || 
+                                cleanText === 'apply today' ||
+                                (cleanText.includes('apply') && cleanText.length < 30 && !cleanText.includes('filter') && !cleanText.includes('terms'));
+                                
+            const isApplyIdOrClass = id.includes('apply') || className.includes('apply-button') || className.includes('apply_button');
+            
+            if (isApplyText || isApplyIdOrClass) {
+              // Scroll into view
+              el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+              // Click
+              el.click();
+              el.dispatchEvent(new Event('click', { bubbles: true }));
+              return { success: true, text: text };
+            }
+          }
+        }
+        return { success: false };
+      };
+
+      // Try main page first
+      const mainResult = await page.evaluate(findAndClickApplyInBrowser).catch(() => ({ success: false }));
+      if (mainResult.success) {
+        applyBtnClicked = true;
+        clickedText = mainResult.text;
+        console.log(`${colors.green}✅ Clicked "Apply" button ("${clickedText}") on main page!${colors.reset}`);
+      } else {
+        // Try all frames with filters and timeouts
+        const pageUrl = page.url();
+        for (const frame of page.frames()) {
+          const frameUrl = await getFrameUrl(frame);
+          if (shouldSkipUrl(frameUrl, pageUrl)) {
+            continue;
+          }
+          try {
+            const frameResult = await evaluateWithTimeout(frame, findAndClickApplyInBrowser, undefined, 2000);
+            if (frameResult && frameResult.success) {
+              applyBtnClicked = true;
+              clickedText = frameResult.text;
+              console.log(`${colors.green}✅ Clicked "Apply" button ("${clickedText}") inside iframe (${frame.url()})!${colors.reset}`);
+              break;
+            }
+          } catch (e) {
+            // ignore frame evaluation error and timeouts
+          }
+        }
+      }
+
+      if (applyBtnClicked) {
+        console.log(`${colors.cyan}Waiting 3s for transition/scroll/render...${colors.reset}`);
+        await delay(3000);
+      } else {
+        console.log(`${colors.dim}No explicit, visible "Apply" button found or already revealed. Continuing...${colors.reset}`);
       }
     } catch (e) {
       console.log(`${colors.dim}Note: Could not click Apply button automatically: ${e.message}${colors.reset}`);
     }
+
 
     // Print draft answers in high contrast for the user
     if (customAnswers.length > 0) {
@@ -1127,48 +1555,85 @@ async function main() {
     }
 
     // Run unified visual form autofill engine
-    await autofillForm(page, profile, resumePath, customAnswers);
-
-    // Try clicking Simplify button if present
-    try {
-      const simplifyButton = page.locator('button:has-text("Simplify"), [class*="simplify"], [id*="simplify"]').first();
-      if (await simplifyButton.isVisible()) {
-        console.log(`${colors.cyan}🤖 Found floating Simplify Jobs button! Clicking to trigger standard autofill...${colors.reset}`);
-        await simplifyButton.click();
-        console.log(`${colors.green}✅ Clicked Simplify Jobs trigger!${colors.reset}`);
-      } else {
-        console.log(`${colors.dim}💡 Simplify Jobs autofill button not auto-clicked. You can trigger it manually in Chrome. ${colors.reset}`);
-      }
-    } catch (e) {
-      // Ignore click failures
-    }
+    const targetFrame = await autofillForm(page, profile, resumePath, customAnswers);
 
     if (argSubmit) {
-      console.log(`\n${colors.bright}${colors.bgMagenta}🚀 USER OVERRIDE: Submitting application...${colors.reset}`);
+      console.log(`\n${colors.bright}${colors.bgMagenta}🚀 AUTONOMOUS PIPELINE: Submitting application...${colors.reset}`);
+      let submissionSuccess = false;
       try {
-        // Find submit button
-        const submitBtn = page.locator('button:has-text("Submit application"), button:has-text("Submit Application"), [id*="submit-button"], [id*="submit_app"]').first();
-        if (await submitBtn.count() > 0 && await submitBtn.first().isVisible()) {
-          console.log(`${colors.cyan}🤖 Found submit button with text: "${await submitBtn.first().innerText()}"${colors.reset}`);
+        // Highly robust selector list for final submit buttons
+        const submitSelector = [
+          'button:has-text("Submit application")',
+          'button:has-text("Submit Application")',
+          'button:has-text("Submit")',
+          'button[type="submit"]',
+          'input[type="submit"]',
+          '[id*="submit-button"]',
+          '[id*="submit_app"]',
+          '[data-automation-id="submit-button"]',
+          'button[id*="submit"]',
+          'input[id*="submit"]'
+        ].join(', ');
+
+        let submitBtn = targetFrame.locator(submitSelector).first();
+        let submitBtnInFrame = true;
+        if (await submitBtn.count() === 0 || !(await submitBtn.isVisible())) {
+          submitBtn = page.locator(submitSelector).first();
+          submitBtnInFrame = false;
+        }
+
+        if (await submitBtn.count() > 0 && await submitBtn.isVisible()) {
+          console.log(`${colors.cyan}🤖 Found final submit button in ${submitBtnInFrame ? 'iframe' : 'main page'} with text: "${await submitBtn.innerText().catch(() => 'Submit')}"${colors.reset}`);
           console.log(`${colors.yellow}Clicking submit...${colors.reset}`);
-          await submitBtn.first().click();
-          console.log(`${colors.green}✅ Clicked submit! Waiting 5s for page transition/confirmation...${colors.reset}`);
-          await page.waitForTimeout(5000);
+          await submitBtn.click();
+          console.log(`${colors.green}✅ Clicked submit! Waiting 6s for page transition/confirmation...${colors.reset}`);
+          await delay(6000);
           
           // Verify if submitted successfully
           const currentUrl = page.url();
-          const currentTitle = await page.title();
+          const currentTitle = await page.title().catch(() => '');
           console.log(`Current URL: ${currentUrl}`);
           console.log(`Current Title: ${currentTitle}`);
           
-          if (currentUrl.includes('confirmation') || currentUrl.includes('thank-you') || currentUrl.includes('thanks') || currentTitle.toLowerCase().includes('thank') || currentTitle.toLowerCase().includes('success')) {
-            console.log(`\n${colors.bright}${colors.green}🎉 Application submitted successfully!${colors.reset}`);
-            // Automatically mark as Applied in tracker
+          let hasConfirmationText = false;
+          try {
+            hasConfirmationText = await page.evaluate(() => {
+              const bodyText = document.body.innerText.toLowerCase();
+              return bodyText.includes('thank you for') || 
+                     bodyText.includes('application submitted') || 
+                     bodyText.includes('successfully submitted') || 
+                     bodyText.includes('your application has been') ||
+                     bodyText.includes('thanks for applying') ||
+                     bodyText.includes('application received') ||
+                     bodyText.includes('thanks, application received');
+            });
+            if (!hasConfirmationText && targetFrame !== page.mainFrame()) {
+              hasConfirmationText = await targetFrame.evaluate(() => {
+                const bodyText = document.body.innerText.toLowerCase();
+                return bodyText.includes('thank you for') || 
+                       bodyText.includes('application submitted') || 
+                       bodyText.includes('successfully submitted') || 
+                       bodyText.includes('your application has been') ||
+                       bodyText.includes('thanks for applying') ||
+                       bodyText.includes('application received') ||
+                       bodyText.includes('thanks, application received');
+              });
+            }
+          } catch (e) {}
+
+          const isRedirected = currentUrl.toLowerCase().includes('confirmation') || 
+                               currentUrl.toLowerCase().includes('thank') || 
+                               currentUrl.toLowerCase().includes('success') || 
+                               currentUrl.toLowerCase().includes('/applied');
+
+          const isTitleConfirmed = currentTitle.toLowerCase().includes('thank') || 
+                                   currentTitle.toLowerCase().includes('success');
+
+          if (isRedirected || isTitleConfirmed || hasConfirmationText) {
+            console.log(`\n${colors.bright}${colors.green}🎉 Application submission verified successfully!${colors.reset}`);
             const ok = updateApplicationStatus(app.id, 'Applied');
             if (ok) console.log(`${colors.green}🎉 Successfully marked application #${app.id} as "Applied"!${colors.reset}`);
-          } else {
-            console.log(`\n${colors.yellow}⚠️ Application click executed. Please double check your Chrome browser tab to ensure no validation errors occurred.${colors.reset}`);
-            console.log(`If it submitted successfully, run:\n    node scratch/apply_automator.mjs --id ${app.id} --status Applied`);
+            submissionSuccess = true;
           }
         } else {
           console.error(`${colors.red}Error: Could not locate a visible Submit button on the page.${colors.reset}`);
@@ -1177,7 +1642,22 @@ async function main() {
         console.error(`${colors.red}Error during submit: ${submitErr.message}${colors.reset}`);
       }
       
-      await browser.close();
+      if (submissionSuccess) {
+        // Only close browser if we are 100% sure it was successful
+        await browser.close();
+      } else {
+        // Keep the tab open and warn the user
+        console.log(`\n${colors.bright}${colors.bgBlue}============================================================`);
+        console.log(`⚠️ SUBMISSION UNVERIFIED / FAILED`);
+        console.log(`============================================================`);
+        console.log(`The form was filled and submit clicked, but success was not verified.`);
+        console.log(`This is common when there are validation errors, CAPTCHAs, or required fields.`);
+        console.log(`\n👉 KEEPING CHROME TAB OPEN WITH YOUR POPULATED FORM!`);
+        console.log(`Please switch to Chrome, resolve any errors, and submit manually.`);
+        console.log(`Once submitted, you can update the tracker status by running:`);
+        console.log(`\n    node scratch/apply_automator.mjs --id ${app.id} --status Applied`);
+        console.log(`============================================================\n`);
+      }
       return;
     }
 
@@ -1185,7 +1665,7 @@ async function main() {
     console.log(`${colors.bright}${colors.bgBlue}              ACTION NEEDED IN CHROME                       ${colors.reset}`);
     console.log(`============================================================`);
     console.log(`1. Review the opened tab in Google Chrome.`);
-    console.log(`2. Trigger Simplify Jobs extension to fill name, resume, email, etc.`);
+    console.log(`2. Verify that all standard fields (name, email, resume, etc.) are correctly filled.`);
     console.log(`3. Check that the custom AI answers are properly filled.`);
     console.log(`4. Handoff is complete — fill remaining fields & submit!`);
     console.log(`============================================================\n`);

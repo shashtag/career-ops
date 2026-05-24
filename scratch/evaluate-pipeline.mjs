@@ -1034,7 +1034,7 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
             const appId = findTrackerIdByReport(filename);
             if (appId) {
               console.log(`\n🚀 Autonomous Pipeline: Launching Apply Automator for application #${appId}...`);
-              const applyArgs = ['scratch/apply_automator.mjs', '--id', appId, '--non-interactive'];
+              const applyArgs = ['scratch/apply_automator.mjs', '--id', appId, '--non-interactive', '--submit'];
               spawnSync('node', applyArgs, { stdio: 'inherit', cwd: ROOT });
             } else {
               console.warn(`${colors.yellow}⚠️ Could not locate application ID in applications.md for reports/${filename}. Skipping automator launch.${colors.reset}`);
