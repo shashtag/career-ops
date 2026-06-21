@@ -16,6 +16,18 @@ If the input is a **URL** (not pasted JD text), follow this strategy to extract 
 
 **If the input is JD text** (not a URL): use directly, without needing to fetch.
 
+## Step 0.5 — Liveness gate
+
+Before running any evaluation, confirm the posting is still live. The Step 0 Playwright snapshot already holds the evidence — judge it now, before spending tokens on the A-G evaluation, the report, or a PDF. A 404/expired page silently served as a static fallback ("position filled", empty shell) otherwise scores a full evaluation against phantom content.
+
+1. From the Step 0 snapshot/fetched content, classify the posting:
+   - **active posting evidence:** title/role + a real job description or an application/apply path
+   - **closed posting evidence:** expired/closed/"no longer accepting applications", missing JD with only nav/footer, hard redirect to a generic careers/search page, or 404/410
+2. If the posting appears closed or the page is a dead/fallback shell, **stop here**: do not run Step 1–Step 4. Tell the candidate the link is dead, and if the entry came from `data/pipeline.md`, mark it `- [x] ~~Company | Role~~ — oferta nieaktywna`.
+3. If only JD text was pasted (no URL), there is no link to verify — skip the gate and proceed.
+
+Do not continue to Step 1 until this gate is resolved.
+
 ## Step 1 — A-G Evaluation
 
 Execute the same as the `oferta` mode (read `modes/oferta.md` for all A-F blocks + Block G Posting Legitimacy).
@@ -32,10 +44,9 @@ Read `config/profile.yml`. Check `cv.output_format`:
 - If `"latex"`, execute the full pipeline from `modes/latex.md`
 - Otherwise (default), execute the full pipeline from `modes/pdf.md`
 
-## Step 4 — Draft Application Answers (only if score >= 4.0)
+## Step 4 — Draft Application Answers (only if score >= 4.5)
 
-If the final score is >= 4.0, generate a draft of responses for the application form:
-
+If the final score is >= 4.5, generate a draft of responses for the application form:
 
 1. **Extract form questions**: Use Playwright to navigate to the form and take a snapshot. If they cannot be extracted, use the generic questions.
 2. **Generate responses** following the tone (see below).
@@ -74,14 +85,3 @@ If the final score is >= 4.0, generate a draft of responses for the application 
 Record it in `data/applications.md` with all columns including Report and PDF as ✅.
 
 **If any step fails**, continue with the next ones and mark the failed step as pending in the tracker.
-
-## Step 6 — Fill Application Form (Apply)
-
-If the score is >= 4.0, automatically launch the apply automator script to populate the form and upload the resume:
-
-```bash
-node scratch/apply_automator.mjs --id {id} --non-interactive
-```
-
-This will launch Google Chrome via remote debugging (port 9222), navigate to the job application page, upload the tailored CV, populate all standard fields, fill custom dropdowns, and inject the drafted custom answers into textareas/text inputs, halting just before submission for final user review in Chrome.
-

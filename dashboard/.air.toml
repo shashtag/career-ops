@@ -1,0 +1,27 @@
+# .air.toml for career-ops dashboard rebuilder
+# Run "air" inside the /dashboard directory to start watching
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Automatically compile the binary and place it in the project root
+  cmd = "go build -o ../career-dashboard ."
+  
+  # CRITICAL: We set the runner to "true" (a shell no-op). 
+  # This prevents Air from launching the interactive TUI in a non-TTY environment,
+  # keeping Air as a high-speed, background-only compiler.
+  bin = "true"
+  
+  delay = 500
+  exclude_dir = ["tmp", "vendor"]
+  include_ext = ["go"]
+  exclude_regex = ["_test.go"]
+  stop_on_error = true
+
+[color]
+  build = "yellow"
+  watcher = "cyan"
+
+[log]
+  time = false
