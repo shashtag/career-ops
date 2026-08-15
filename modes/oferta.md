@@ -69,6 +69,8 @@ On contradiction, add exactly one flag line at the top of Block B in the report,
 
 `⚠️ **Geo-mismatch:** location field says remote, but JD body says "{verbatim JD line}"`
 
+Also, set `location_conflict: true` in the Machine Summary block, and include `**Location Conflict:** ⚠️ LOCATION CONFLICT` in the report header. If there is no contradiction, set `location_conflict: false` in the Machine Summary block.
+
 The flag is an additive line only — Block B's existing content stays unchanged below it, and no flag line appears when there is no contradiction.
 
 ## Block B — Match with CV
@@ -379,6 +381,7 @@ Save full evaluation in `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 **Archetype:** {detected}
 **Score:** {X/5}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
+**Location Conflict:** ⚠️ LOCATION CONFLICT (only if conflict is detected)
 **PDF:** {path or pending}
 
 ---

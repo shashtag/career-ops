@@ -1,8 +1,27 @@
 # Personal data (user fills these)
 cv.md
 data/applications.md
+data/applications.db
 data/pipeline.md
 data/scan-history.tsv
+data/scan-runs.tsv
+data/follow-ups.md
+data/salary-observations.tsv
+data/status-log.tsv
+data/upskill/*
+data/blacklist.md
+data/assessments.tsv
+data/cache/
+data/classified-jobs.json
+data/company-caps.json
+data/pdf-index.tsv
+data/run-log.tsv
+data/search-queries.md
+data/offers/*
+!data/offers/.gitkeep
+data/pending-review.yml
+data/pending-review.md
+data/rejection-scan-history.json
 data/parser-output/**/*.json
 !data/parser-output/.gitkeep
 !data/parser-output/**/.gitkeep
@@ -18,6 +37,11 @@ batch/tracker-additions/**/*.tsv
 !batch/tracker-additions/.gitkeep
 jds/*
 !jds/.gitkeep
+interview-prep/*.md
+!interview-prep/story-bank.md
+interview-prep/sessions/*
+!interview-prep/sessions/README.md
+!interview-prep/sessions/.gitkeep
 
 # Writing samples (user's personal files — never committed)
 writing-samples/*
@@ -25,8 +49,15 @@ writing-samples/*
 
 # User config and customization (never auto-updated)
 config/profile.yml
+config/cv-facts.json
+config/benchmarks.yml
+config/plugins.yml
+plugins.lock
+plugins.local/
 portals.yml
 modes/_profile.md
+modes/_custom.md
+voice-dna.md
 .update-dismissed
 .update-lock
 .cv-sync-state.json
@@ -46,18 +77,26 @@ batch/scraped-jds/
 *.mov
 *.mp4
 
-# Claude Code local
+# Claude / Agent CLI local
 .claude/settings.local.json
 .claude/memory/
+.claude/projects/
 career-dashboard
 package-lock.json
 
 # User's personal writing digest
 article-digest.md
 
+# Suggestion run logs
+suggestions/
+
 # Backups and temporary logs
 *.bak
 *.log
+
+# Root-level one-off automation scripts
+/*.js
+scripts/
 
 # Untracked scratch files (keeping tracked ones)
 scratch/*
@@ -66,3 +105,4 @@ scratch/*
 !scratch/fill-zapier-form-autonomous.mjs
 !scratch/fill-zapier-release-autonomous.mjs
 !scratch/generate-tailored-cv.mjs
+!scratch/check-env.js

@@ -317,12 +317,68 @@ async function callOpenRouter(systemPrompt, userMessage) {
 // Context loading
 // ---------------------------------------------------------------------------
 function loadContext() {
-  return {
+  const cachePath = path.join(__dirname, 'scratch', 'session-profile-cache.json');
+  const files = {
+    cv: 'cv.md',
+    profile: 'config/profile.yml',
+    shared: 'modes/_shared.md',
+    profileMode: 'modes/_profile.md'
+  };
+
+  // Get current modified times
+  const mtimes = {};
+  for (const [key, filepath] of Object.entries(files)) {
+    try {
+      const fullPath = path.join(__dirname, filepath);
+      if (fs.existsSync(fullPath)) {
+        mtimes[key] = fs.statSync(fullPath).mtimeMs;
+      } else {
+        mtimes[key] = 0;
+      }
+    } catch {
+      mtimes[key] = 0;
+    }
+  }
+
+  // Try reading cache
+  if (fs.existsSync(cachePath)) {
+    try {
+      const cache = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+      // Check if cache has same mtimes
+      let isValid = true;
+      for (const key of Object.keys(files)) {
+        if (cache.mtimes[key] !== mtimes[key]) {
+          isValid = false;
+          break;
+        }
+      }
+      if (isValid) {
+        return cache.data;
+      }
+    } catch {
+      // Ignore cache reading error
+    }
+  }
+
+  const data = {
     cv:          readFile('cv.md')               ?? 'CV not found.',
     profile:     readFile('config/profile.yml')  ?? '',
     shared:      readFile('modes/_shared.md')    ?? '',
     profileMode: readFile('modes/_profile.md')   ?? '',
   };
+
+  // Write new cache
+  try {
+    const scratchDir = path.join(__dirname, 'scratch');
+    if (!fs.existsSync(scratchDir)) {
+      fs.mkdirSync(scratchDir, { recursive: true });
+    }
+    fs.writeFileSync(cachePath, JSON.stringify({ mtimes, data }, null, 2), 'utf-8');
+  } catch (err) {
+    // Ignore cache writing errors
+  }
+
+  return data;
 }
 
 function buildSystemPrompt(modeContent, ctx) {
@@ -337,6 +393,26 @@ function buildSystemPrompt(modeContent, ctx) {
     'CV (Markdown):',
     ctx.cv,
   ].filter(Boolean).join('\n\n');
+}
+
+// Helper to check if a Typeform is private
+async function checkTypeformPrivate(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD', redirect: 'manual' });
+    const location = res.headers.get('location') || '';
+    if (location.includes('private-typeform') || (res.status === 302 && location.includes('private-typeform'))) {
+      return true;
+    }
+    if (res.status >= 300 && res.status < 400 && location) {
+      const followRes = await fetch(location, { method: 'HEAD' });
+      if (followRes.url.includes('private-typeform')) {
+        return true;
+      }
+    }
+  } catch (err) {
+    // Ignore
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +444,9 @@ async function fetchJobPage(url) {
     console.warn('[fetch] Playwright unavailable — falling back to plain fetch.');
   }
 
+  let text = '';
+  let typeformUrls = [];
+
   if (chromium) {
     let browser;
     try {
@@ -375,11 +454,16 @@ async function fetchJobPage(url) {
       const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
       await page.waitForTimeout(2000); // wait for SPA render
-      const text = await page.evaluate(() => {
+      const evalResult = await page.evaluate(() => {
+        const typeforms = Array.from(document.querySelectorAll('a'))
+          .map(a => a.href)
+          .filter(href => href && href.includes('typeform.com'));
         document.querySelectorAll('script,style,nav,footer,header').forEach(el => el.remove());
-        return (document.body?.innerText || document.body?.textContent || '').replace(/\s+/g, ' ').trim();
+        const bodyText = (document.body?.innerText || document.body?.textContent || '').replace(/\s+/g, ' ').trim();
+        return { text: bodyText, typeformUrls: typeforms };
       });
-      return text.slice(0, 16_000);
+      text = evalResult.text;
+      typeformUrls = evalResult.typeformUrls;
     } catch (e) {
       console.warn(`[fetch] Playwright error: ${e.message} — falling back to plain fetch.`);
     } finally {
@@ -387,18 +471,35 @@ async function fetchJobPage(url) {
     }
   }
 
-  // Plain HTTP fallback
-  try {
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; career-ops/1.0)' }
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
-    const html = await r.text();
-    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 16_000);
-  } catch (e) {
-    throw new Error(`Could not fetch job page: ${e.message}`);
+  if (!text) {
+    // Plain HTTP fallback
+    try {
+      const r = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; career-ops/1.0)' }
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+      const html = await r.text();
+      text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 16_000);
+      const typeformMatches = html.match(/https?:\/\/[^\s"'<>]*typeform\.com\/to\/[A-Za-z0-9]+/g) || [];
+      typeformUrls = Array.from(new Set(typeformMatches));
+    } catch (e) {
+      throw new Error(`Could not fetch job page: ${e.message}`);
+    }
   }
+
+  // Check if any extracted Typeform URLs are private
+  let warning = '';
+  for (const tfUrl of typeformUrls) {
+    const isPrivate = await checkTypeformPrivate(tfUrl);
+    if (isPrivate) {
+      warning = `\n\n⚠️ NOTE TO ASSISTANT: The external application form at ${tfUrl} is currently PRIVATE. Under Block G (Posting Legitimacy), you MUST report: "⚠️ External Typeform required but currently private — may indicate closed hiring or broken link".`;
+      break;
+    }
+  }
+
+  return text.slice(0, 16_000) + warning;
 }
+
 
 // ---------------------------------------------------------------------------
 // portals.yml parser — reads the canonical schema with js-yaml (same library and

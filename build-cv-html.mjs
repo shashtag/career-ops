@@ -254,6 +254,11 @@ function renderHtml(template, payload) {
     html = html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), () => value);
   }
 
+  // Remove empty Certifications section if CERTIFICATIONS placeholder yielded empty content
+  if (!substitutions.CERTIFICATIONS) {
+    html = html.replace(/<div class="section">\s*<div class="section-title">[^<]*Certifications[^<]*<\/div>\s*<div class="cert-table">\s*<\/div>\s*<\/div>/gi, '');
+  }
+
   const unresolved = html.match(PLACEHOLDER_RE);
   if (unresolved) {
     throw new Error(`Unresolved placeholders: ${[...new Set(unresolved)].join(', ')}`);

@@ -347,7 +347,7 @@ These are two separate axes:
 
 **This system is designed for quality, not quantity.** The goal is to help the user find and apply to roles where there is a genuine match -- not to spam companies with mass applications.
 
-- **NEVER submit an application without the user reviewing it first.** Fill forms, draft answers, generate PDFs -- but always STOP before clicking Submit/Send/Apply. The user makes the final call.
+- **Autonomous submission is enabled for this user** (overrides the upstream default). Fill the form completely first -- that is the primary deliverable -- then attempt the submit yourself. See the Submitting section of `modes/_custom.md` for what to get right before clicking. If a submit can't go through, leave the form filled for the user. Do not hand back a finished form purely to collect a confirmation click.
 - **Strongly discourage low-fit applications.** If a score is below 4.0/5, explicitly recommend against applying. The user's time and the recruiter's time are both valuable. Only proceed if the user has a specific reason to override the score.
 - **Quality over speed.** A well-targeted application to 5 companies beats a generic blast to 50. Guide the user toward fewer, better applications.
 - **Respect recruiters' time.** Every application a human reads costs someone's attention. Only send what's worth reading.

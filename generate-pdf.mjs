@@ -117,6 +117,8 @@ const SECTION_ALIASES = new Map([
   ['projects', 'projects'],
   ['selected projects', 'projects'],
   ['personal projects', 'projects'],
+  ['research & selected projects', 'projects'],
+  ['research and selected projects', 'projects'],
   ['education', 'education'],
   ['education & certifications', 'education'],
   ['certifications', 'certifications'],
@@ -273,6 +275,37 @@ function updatePDFManifest(reportNum, pdfPath, htmlPath, format) {
     '# report\tpdf\thtml\tformat\tdate — written by generate-pdf.mjs, do not edit\n' +
       lines.join('\n') + '\n'
   );
+
+  if (reportNum) {
+    try {
+      const appsPath = resolve(__dirname, 'data', 'applications.md');
+      if (existsSync(appsPath)) {
+        const content = readFileSync(appsPath, 'utf-8');
+        const fileLines = content.split('\n');
+        let updated = false;
+        const normReportNum = normKey(reportNum);
+        for (let i = 0; i < fileLines.length; i++) {
+          const line = fileLines[i].trim();
+          if (line.startsWith('|') && !line.startsWith('| -') && !line.startsWith('| #')) {
+            const parts = line.split('|').map(p => p.trim());
+            if (parts.length >= 9 && normKey(parts[1]) === normReportNum) {
+              parts[7] = '✅';
+              fileLines[i] = parts.join(' | ');
+              updated = true;
+              break;
+            }
+          }
+        }
+        if (updated) {
+          writeFileSync(appsPath, fileLines.join('\n'), 'utf-8');
+          console.log(`🎉 Automatically marked PDF status to ✅ in applications.md for report #${reportNum}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to auto-update applications.md PDF column: ${err.message}`);
+    }
+  }
+
   return relPDF;
 }
 

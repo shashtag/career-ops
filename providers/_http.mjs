@@ -36,7 +36,16 @@ async function fetchWithTimeout(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers =
 
 export async function fetchJson(url, opts = {}) {
   const res = await fetchWithTimeout(url, opts);
-  return await res.json();
+  const text = await res.text();
+  let cleaned = text;
+  if (url.includes('greenhouse.io') || url.includes('greenhouse')) {
+    cleaned = text
+      .replace(/[\x00-\x1F\x7F]/g, ' ')  // strip control chars
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+  return JSON.parse(cleaned);
 }
 
 export async function fetchText(url, opts = {}) {

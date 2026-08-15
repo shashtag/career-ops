@@ -264,6 +264,7 @@ confidence: "{Low | Medium | High}"
 next_action: "{one concrete next step}"
 via: {agency/recruiter firm as a quoted string, or null for direct applications}
 company_confidential: {true when the end employer is unknown (company is "?"), else false}
+location_conflict: {true when the structured location field (remote) contradicts the JD body (hybrid/onsite binding requirements), else false}
 advertised_comp: {verbatim JD salary/range as a quoted string (e.g. "80-90k EUR"), or null when the JD states nothing}
 ```
 
@@ -294,6 +295,7 @@ Report header:
 **Score:** {X.X/5}
 **Legitimacy:** {High Confidence | Proceed with Caution | Suspicious}
 **URL:** {{URL}}
+**Location Conflict:** ⚠️ LOCATION CONFLICT (only if conflict is detected)
 **PDF:** {output/cv-candidate-{company-slug}-{{DATE}}.pdf if score >= resolved auto_pdf_score_threshold, otherwise a localized equivalent of `not generated — run /career-ops pdf {company-slug} to create on demand` in `language.output`}
 **Batch ID:** {{ID}}
 ```

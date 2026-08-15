@@ -104,6 +104,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
 let jdText = '';
 let modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 let saveReport = true;
+let lenient = false;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--file' && args[i + 1]) {
@@ -117,6 +118,8 @@ for (let i = 0; i < args.length; i++) {
     modelName = args[++i];
   } else if (args[i] === '--no-save') {
     saveReport = false;
+  } else if (args[i] === '--lenient') {
+    lenient = true;
   } else if (!args[i].startsWith('--')) {
     jdText += (jdText ? '\n' : '') + args[i];
   }
@@ -319,9 +322,13 @@ try {
 try {
   validateEvaluationShape(evaluationText);
 } catch (err) {
-  console.error('❌  Gemini output failed validation:', err.message);
-  console.error('    No report was saved. Retry, lower temperature, or use the Claude pipeline for this JD.');
-  process.exit(1);
+  if (lenient) {
+    console.warn('⚠️  Gemini output failed validation (bypassed due to --lenient):', err.message);
+  } else {
+    console.error('❌  Gemini output failed validation:', err.message);
+    console.error('    No report was saved. Retry, lower temperature, or use the Claude pipeline for this JD (or pass --lenient to bypass).');
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------------------

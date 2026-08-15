@@ -218,7 +218,13 @@ IMPORTANT OPERATING RULES FOR THIS SESSION
 3. Apply the 6-second clarity gate: strongest matching evidence first.
 4. Replace all {{PLACEHOLDERS}} in the HTML Template exactly as instructed.
 5. Your final output MUST be the complete, raw, tailored HTML document.
-6. Do NOT include markdown formatting like \`\`\`html or conversational filler. Output the raw HTML starting with <!DOCTYPE html> and ending with </html>.`;
+6. Do NOT include markdown formatting like \`\`\`html or conversational filler. Output the raw HTML starting with <!DOCTYPE html> and ending with </html>.
+7. SECTION ORDER (mandatory — must match this exact sequence of the base resume):
+   1. Skills (technical skills grid, languages, frameworks, tools)
+   2. Work Experience (reverse chronological)
+   3. Projects (if included)
+   4. Education
+   DO NOT reorder sections under any circumstances. The PDF validator will reject any other order.`;
 
 // ---------------------------------------------------------------------------
 // Call the OpenAI-compatible endpoint

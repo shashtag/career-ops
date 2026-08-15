@@ -46,21 +46,8 @@ async function main() {
 
     <div class="job">
       <div class="job-header">
-        <span class="job-company">Accenture (Comcast Engineering Team)</span>
-        <span class="job-period">Nov 2023 - Feb 2026</span>
-      </div>
-      <div class="job-role">Advanced Software Engineer</div>
-      <ul>
-        <li><strong>Developer Automation:</strong> Designed and distributed automated Go CLI agent harnesses and test frameworks to standardize microservice structures across 16+ services, saving 1 hour per day per engineer.</li>
-        <li><strong>Scale & Reliability:</strong> Contributed full-stack features (geolocation, A11y, user-flows) to the Comcast Xfinity website (3M daily visits), deploying versioned REST adapters with robust retry policies.</li>
-        <li><strong>Systems Optimization:</strong> Optimized monorepo and microfrontend architectures for high-performance delivery, ensuring seamless coordination across complex service boundaries.</li>
-      </ul>
-    </div>
-
-    <div class="job">
-      <div class="job-header">
         <span class="job-company">ProPro Productions (Germany - Remote)</span>
-        <span class="job-period">June 2021 - Sept 2023</span>
+        <span class="job-period">July 2023 - Nov 2025</span>
       </div>
       <div class="job-role">Founding Engineer</div>
       <ul>

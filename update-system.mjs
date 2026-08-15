@@ -149,6 +149,7 @@ const SYSTEM_PATHS = [
   'set-status-tests.mjs',
   'normalize-statuses.mjs',
   'cv-sync-check.mjs',
+  'cv-sync.mjs',
   'verify-cv-facts.mjs',
   'update-system.mjs',
   'reserve-report-num.mjs',
@@ -327,6 +328,8 @@ const USER_PATHS = [
   'plugins.lock',
   '.claude/settings.json',
   '.claude/hooks/',
+  'scratch/',
+  'suggestions/',
 ];
 
 function parseVersionFile(raw) {

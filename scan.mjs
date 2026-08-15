@@ -44,6 +44,8 @@ import { classifyFetchError } from './verify-portals.mjs';
 import { fingerprintText, findCrossListings } from './fingerprint-core.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { normalizeCompany } from './tracker-utils.mjs';
+import { getCompanyCaps } from './lib/company-caps.mjs';
+import { roleFuzzyMatch } from './role-matcher.mjs';
 
 try {
   const { config } = await import('dotenv');
@@ -868,6 +870,52 @@ export function loadSeenCompanyRoles(appsPath = APPLICATIONS_PATH, canonicalize 
   return seen;
 }
 
+export function loadTrackerRoles(appsPath = APPLICATIONS_PATH, canonicalize = defaultCompanyNormalizer) {
+  const roles = [];
+  if (existsSync(appsPath)) {
+    const lines = readFileSync(appsPath, 'utf-8').split('\n');
+    const colmap = resolveColumns(lines);
+    for (const line of lines) {
+      const row = parseTrackerRow(line, colmap);
+      if (!row) continue;
+      const company = row.company.trim();
+      const role = row.role.trim();
+      const status = (row.status || '').trim();
+      if (company && role) {
+        roles.push({
+          companyKey: canonicalize(company),
+          role: role,
+          status: status
+        });
+      }
+    }
+  }
+  return roles;
+}
+
+export function loadRecentHistoryRoles(historyPath = SCAN_HISTORY_PATH, days = 60) {
+  const recentRoles = [];
+  if (!existsSync(historyPath)) return recentRoles;
+  const today = new Date().toISOString().slice(0, 10);
+  const lines = readFileSync(historyPath, 'utf-8').split('\n');
+  const hasHeader = /^\s*url\s*\t/i.test(lines[0]);
+  for (const line of lines.slice(hasHeader ? 1 : 0)) {
+    const cols = line.split('\t');
+    if (cols.length < 5) continue;
+    const [, firstSeen, , title, company] = cols;
+    if (!firstSeen || !title || !company) continue;
+    const ageDays = daysBetweenIsoDates(firstSeen, today);
+    if (ageDays !== null && ageDays <= days) {
+      recentRoles.push({
+        company: company.trim(),
+        title: title.trim(),
+        firstSeen
+      });
+    }
+  }
+  return recentRoles;
+}
+
 // ── Pipeline writer ─────────────────────────────────────────────────
 
 function normalizeScanScalar(value) {
@@ -1302,6 +1350,18 @@ async function main() {
   const companyFlag = args.indexOf('--company');
   const filterCompany = companyFlag !== -1 ? args[companyFlag + 1]?.toLowerCase() : null;
 
+  // --timeout or --timeout=<ms>: hard execution cap to prevent hanging in scheduled context.
+  const timeoutArg = args.find((a) => a === '--timeout' || a.startsWith('--timeout='));
+  if (timeoutArg) {
+    const timeoutMs = timeoutArg.includes('=') ? (Number(timeoutArg.split('=')[1]) || 45000) : 45000;
+    if (timeoutMs > 0) {
+      setTimeout(() => {
+        console.warn(`\n⚠️ scan.mjs execution timed out after ${timeoutMs}ms. Exiting gracefully.`);
+        process.exit(0);
+      }, timeoutMs).unref();
+    }
+  }
+
   // 1. Load providers
   const providers = await loadProviders(PROVIDERS_DIR);
   // Opt-in: merge enabled keyed/auth-gated provider plugins. Returns immediately
@@ -1415,6 +1475,8 @@ async function main() {
   const seenUrls = seenUrlState.seen;
   const canonicalizeCompany = buildCompanyCanonicalizer(config.company_aliases);
   const seenCompanyRoles = loadSeenCompanyRoles(APPLICATIONS_PATH, canonicalizeCompany);
+  const trackerRoles = loadTrackerRoles(APPLICATIONS_PATH, canonicalizeCompany);
+  const recentHistoryRoles = loadRecentHistoryRoles(SCAN_HISTORY_PATH, 60);
 
   // 5. Fetch from each target
   const date = new Date().toISOString().slice(0, 10);
@@ -1524,6 +1586,28 @@ async function main() {
           totalDupes++;
           continue;
         }
+        
+        // Fuzzy duplicate/repost check against applications.md (applied/rejected/interview)
+        const isFuzzyTrackerMatch = trackerRoles.some(r => {
+          if (r.companyKey !== canonicalizeCompany(job.company)) return false;
+          const statusLower = r.status.replace(/\*\*/g, '').trim().toLowerCase();
+          if (!['applied', 'rejected', 'interview', 'offer', 'responded'].includes(statusLower)) return false;
+          return job.title.toLowerCase() === r.role.toLowerCase() || roleFuzzyMatch(job.title, r.role);
+        });
+        if (isFuzzyTrackerMatch) {
+          totalDupes++;
+          continue;
+        }
+
+        // Fuzzy duplicate/repost check against recent history (within 60 days)
+        const isFuzzyHistoryMatch = recentHistoryRoles.some(r => {
+          if (canonicalizeCompany(r.company) !== canonicalizeCompany(job.company)) return false;
+          return job.title.toLowerCase() === r.title.toLowerCase() || roleFuzzyMatch(job.title, r.title);
+        });
+        if (isFuzzyHistoryMatch) {
+          totalDupes++;
+          continue;
+        }
         const cooldownResult = cooldownFilter(job);
         if (cooldownResult.skip) {
           totalFilteredCooldown++;
@@ -1588,10 +1672,37 @@ async function main() {
   }
   const crossListings = findCrossListings(verifiedOffers, loadFingerprintHistory());
 
+  // Filter by company caps
+  const caps = getCompanyCaps();
+  const viableOffers = [];
+  const cappedOffers = [];
+  
+  for (const o of verifiedOffers) {
+    const normCompany = o.company.toLowerCase().trim();
+    const capKey = normCompany.replace(/[^a-z0-9]/g, '');
+    const matchKey = Object.keys(caps).find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === capKey);
+    const capInfo = matchKey ? caps[matchKey] : null;
+    
+    if (capInfo && capInfo.count >= 2) {
+      cappedOffers.push(o);
+    } else {
+      viableOffers.push(o);
+    }
+  }
+
   // 6. Write results
   if (!dryRun && verifiedOffers.length > 0) {
-    appendToPipeline(verifiedOffers);
-    appendToScanHistory(verifiedOffers, date);
+    if (viableOffers.length > 0) {
+      appendToPipeline(viableOffers);
+      appendToScanHistory(viableOffers, date);
+    }
+    if (cappedOffers.length > 0) {
+      appendToScanHistory(cappedOffers, date, 'skipped_cap');
+      console.log(`\n🔴 Skipped ${cappedOffers.length} job(s) due to company application cap (>= 2 apps in last 30d):`);
+      for (const o of cappedOffers) {
+        console.log(`  - ${o.company} | ${o.title}`);
+      }
+    }
   }
   if (!dryRun && cooldownOffers.length > 0) {
     const cooldownGroups = {};
@@ -1684,7 +1795,7 @@ async function main() {
     console.log(`No apply control:      ${droppedOffers.length} dropped`);
     console.log(`Invalid (guarded):     ${invalidOffers.length} dropped`);
   }
-  console.log(`New offers added:      ${verifiedOffers.length}`);
+  console.log(`New offers added:      ${viableOffers.length} (${cappedOffers.length} skipped due to cap)`);
 
   // Trust validation summary (only when trust_filter is configured)
   if (config.trust_filter && config.trust_filter.enabled !== false && verifiedOffers.length > 0) {

@@ -346,6 +346,35 @@ search_queries:
     query: 'site:remoteok.com "AI Engineer" OR "Developer Advocate" OR "Solutions Architect" OR "Forward Deployed" OR "Founding Engineer"'
     enabled: true
 
+  - name: Peerlist — Remote Tech
+    query: 'site:peerlist.io/jobs "AI" OR "Backend" OR "Software Engineer" OR "Go" OR "Golang" OR "Full Stack" remote'
+    enabled: true
+
+  - name: Remote.co — Remote Tech
+    query: 'site:remote.co/job "AI" OR "Backend" OR "Software" OR "Go" OR "Golang" OR "Full Stack"'
+    enabled: true
+
+  - name: Wellfound — Remote Startup Tech
+    query: 'site:wellfound.com/jobs "AI" OR "Backend" OR "Software" OR "Go" OR "Golang" OR "Full Stack" remote'
+    enabled: true
+
+  - name: FlexJobs — Remote Tech
+    query: 'site:flexjobs.com/jobs "AI" OR "Backend" OR "Software" OR "Go" OR "Golang" OR "Full Stack" remote'
+    enabled: true
+
+  - name: NoDesk — Remote SDE & AI
+    query: 'site:nodesk.co/jobs "AI" OR "Backend" OR "Software" OR "Go" OR "Golang" OR "Full Stack"'
+    enabled: true
+
+  - name: Web3 Career — Go & AI
+    query: 'site:web3.career "Go" OR "Golang" OR "AI Engineer" OR "Backend" remote'
+    enabled: true
+
+  - name: Crypto Jobs List — Go & AI
+    query: 'site:cryptojobslist.com "Go" OR "Golang" OR "AI" OR "Backend" remote'
+    enabled: true
+
+
   # -- Specialized AI / Dev-Tools / FDE boards --
 
   - name: ai-jobs.net — DevRel/SA/FDE

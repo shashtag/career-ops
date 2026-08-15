@@ -580,13 +580,49 @@ for (const file of tsvFiles) {
     );
   }
 
+function extractJobUrl(reportField) {
+  if (!reportField) return null;
+  const m = reportField.match(/\[\d+\]\(([^)]+)\)/);
+  const relPath = m ? m[1] : reportField;
+  const fullPath = join(TRACKER_DIR, relPath);
+  if (!existsSync(fullPath)) return null;
+  try {
+    const content = readFileSync(fullPath, 'utf-8');
+    const mdMatch = content.match(/\*\*URL:\*\*\s*\[[^\]]+\]\((https?:\/\/[^\s\)]+)\)/i);
+    if (mdMatch) return mdMatch[1].trim();
+    const simpleMatch = content.match(/\*\*URL:\*\*\s*(https?:\/\/\S+)/i);
+    return simpleMatch ? simpleMatch[1].trim() : null;
+  } catch (e) {
+    return null;
+  }
+}
+
   if (!duplicate) {
-    // Company + role fuzzy match
+    // Company + URL / req / role fuzzy match
     const normCompany = normalizeCompany(addition.company);
     const additionReqNum = extractReqNumber(addition.notes);
+    const additionUrl = extractJobUrl(addition.report);
+
     duplicate = existingApps.find(app => {
       if (normalizeCompany(app.company) !== normCompany) return false;
-      if (!roleFuzzyMatch(addition.role, app.role)) return false;
+
+      // 1. Primary check: URL equality / divergence when both reports carry JD URLs
+      const appUrl = extractJobUrl(app.report);
+      if (additionUrl && appUrl) {
+        if (additionUrl === appUrl) return true; // confirmed duplicate by URL
+        return false; // distinct URLs -> distinct postings
+      }
+
+      // 2. Req/job-number check: when BOTH sides carry an extractable req/job number (#1524)
+      const appReqNum = extractReqNumber(app.notes);
+      if (additionReqNum && appReqNum) {
+        if (additionReqNum === appReqNum) return true; // confirmed duplicate by req number
+        return false; // different req numbers -> distinct postings
+      }
+
+      // 3. Fallback: title fuzzy matching
+      if (!roleFuzzyMatch(addition.role, app.role, 0.85)) return false;
+
       // Cross-channel guard (#1596): unknown-employer rows (`?`) all normalize
       // to the same empty company key, but the same role via two DIFFERENT
       // agencies is two real submissions — merging them silently is exactly
@@ -596,15 +632,7 @@ for (const file of tsvFiles) {
       // collapse distinct non-Latin agency names to the same empty key.
       if ((String(addition.company).trim() === '?' || String(app.company).trim() === '?')
           && normalizeVia(addition.via || '') !== normalizeVia(app.via || '')) return false;
-      // Req/job-number guard (#1524): a similarly-worded title at the same
-      // company can still be a genuinely distinct posting when a req/job
-      // number in the Notes column proves it (employers like TD commonly run
-      // concurrent near-identical L&D/HR titles distinguished only by req#).
-      // Only treat this as evidence the rows differ when BOTH sides carry an
-      // extractable number and they disagree — if either side has none, fall
-      // back to today's fuzzy-match-only behavior unchanged.
-      const appReqNum = extractReqNumber(app.notes);
-      if (additionReqNum && appReqNum && additionReqNum !== appReqNum) return false;
+
       return true;
     });
   }

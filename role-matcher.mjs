@@ -98,7 +98,7 @@ function extractSeniorities(title) {
  * @param {string} b - Second role title.
  * @returns {boolean} True when the titles are similar enough to deduplicate.
  */
-export function roleFuzzyMatch(a, b) {
+export function roleFuzzyMatch(a, b, minThreshold = 0.6) {
   const senA = extractSeniorities(a);
   const senB = extractSeniorities(b);
 
@@ -128,5 +128,5 @@ export function roleFuzzyMatch(a, b) {
   // Use a true set-based Jaccard ratio. Dividing by the smaller title inflates
   // matches for roles that share a long generic prefix but differ in specialty.
   const union = new Set([...wordsA, ...wordsB]).size;
-  return overlap.length / union >= 0.6;
+  return overlap.length / union >= minThreshold;
 }
