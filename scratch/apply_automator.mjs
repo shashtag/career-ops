@@ -1,3 +1,26 @@
+/**
+ * RETIRED 2026-08-27 — do not use this to fill or submit application forms.
+ *
+ * Replaced by the loop in modes/_custom.md ("Applying"):
+ *     node answer-resolver.mjs --collector          # snippet to run in the page
+ *     node answer-resolver.mjs --stdin --summary    # what to say, per field
+ *     ... browser agent fills ...
+ *     node audit-form-fill.mjs --stdin --summary    # gate, must exit 0
+ *     ... browser agent submits, as one deliberate call ...
+ *
+ * Why: this file held a live page handle across a long-running process with an
+ * interactive stdin. When that stdin hit EOF (background task, zombie process,
+ * non-TTY), the prompt defaulted to "Apply" and it submitted on its own — 7+
+ * confirmed incidents. It also reported its own state unreliably, logging
+ * "Not submitted" on forms that had in fact gone through. Neither failure is
+ * possible when submit is a discrete tool call by the agent.
+ *
+ * Kept, not deleted, because ~40 past applications reference it in notes and its
+ * per-ATS DOM knowledge was mined into config/application-answers.yml and the
+ * ATS-quirk checklist in modes/_custom.md. It still runs read-only helpers; it
+ * refuses to fill or submit without --i-know-this-is-retired.
+ */
+
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -4141,6 +4164,28 @@ async function main() {
     await askQuestion('\nPress [Enter] to return to the main dashboard...');
     main();
   }
+}
+
+const RETIRED_OVERRIDE = process.argv.includes('--i-know-this-is-retired');
+if (!RETIRED_OVERRIDE && process.argv[1] && process.argv[1].endsWith('apply_automator.mjs')) {
+  console.error(`
+apply_automator.mjs is RETIRED (2026-08-27).
+
+It auto-submitted forms 7+ times from a stale page handle with an EOF'd stdin,
+and misreported whether a submit landed. Use the agent-driven loop instead:
+
+  node answer-resolver.mjs --collector           # snippet to evaluate in the form frame
+  node answer-resolver.mjs --stdin --summary     # what to answer, per field
+  <browser agent fills the form>
+  node audit-form-fill.mjs --stdin --summary     # must exit 0 before submitting
+  <browser agent clicks submit, once, deliberately>
+
+Full workflow: modes/_custom.md -> "Applying".
+To mark a tracker row instead:  node set-status.mjs <report#|company> Applied --note "..."
+
+Override (not recommended):  --i-know-this-is-retired
+`);
+  process.exit(2);
 }
 
 if (process.argv[1] && process.argv[1].endsWith('apply_automator.mjs')) {

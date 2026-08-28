@@ -52,6 +52,7 @@ config/profile.yml
 config/cv-facts.json
 config/benchmarks.yml
 config/plugins.yml
+config/application-answers.yml
 plugins.lock
 plugins.local/
 portals.yml

@@ -9,69 +9,39 @@
  * each field's current value with lib/answer-sanitizer.mjs.
  *
  * Usage:
- *   node audit-form-fill.mjs                 # audit the active tab, JSON out
+ *   node audit-form-fill.mjs                 # audit the active tab over CDP, JSON out
  *   node audit-form-fill.mjs --summary       # human-readable table
  *   node audit-form-fill.mjs --url <substr>  # pick the tab whose URL contains substr
+ *   node audit-form-fill.mjs --stdin         # audit an agent-collected dump (no CDP)
+ *   node audit-form-fill.mjs --collector     # print the JS the agent should evaluate
+ *
+ * --stdin is the browser-agent path: the agent evaluates the snippet from
+ * --collector in the page and pipes the JSON back here, so the same gate runs
+ * whether or not Chrome was started with a debug port.
  *
  * Exit codes: 0 = clean, 1 = problems found, 2 = could not audit.
  */
 
+import { readFileSync } from 'fs';
 import { auditAnswer } from './lib/answer-sanitizer.mjs';
+import { COLLECT_EXPRESSION, parseCollected } from './lib/collect-fields.mjs';
 
 const args = process.argv.slice(2);
 const summary = args.includes('--summary');
+const useStdin = args.includes('--stdin');
 const urlIdx = args.indexOf('--url');
 const urlFilter = urlIdx !== -1 ? args[urlIdx + 1] : null;
 
+if (args.includes('--collector')) {
+  console.log(COLLECT_EXPRESSION);
+  process.exit(0);
+}
+
 const CDP = 'http://localhost:9222';
 
-/** Collect field label/value/type from every frame, in the page's own context. */
-const COLLECT = `(() => {
-  const labelFor = (el) => {
-    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
-    const ref = el.getAttribute('aria-labelledby');
-    if (ref) {
-      const t = ref.split(/\\s+/).map(id => document.getElementById(id)).filter(Boolean)
-        .map(n => n.innerText).join(' ').trim();
-      if (t) return t;
-    }
-    if (el.id) {
-      const l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
-      if (l && l.innerText.trim()) return l.innerText.trim();
-    }
-    const wrap = el.closest('label');
-    if (wrap && wrap.innerText.trim()) return wrap.innerText.trim();
-    let n = el.parentElement, hops = 0;
-    while (n && hops < 4) {
-      const l = n.querySelector('label, legend, .label, [class*="label"]');
-      if (l && l.innerText.trim()) return l.innerText.trim();
-      n = n.parentElement; hops++;
-    }
-    return el.name || el.placeholder || '(unlabelled)';
-  };
-
-  const out = [];
-  const nodes = document.querySelectorAll('input, textarea, select');
-  for (const el of nodes) {
-    const type = (el.type || el.tagName).toLowerCase();
-    if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type)) continue;
-    const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden') continue;
-    let value = '';
-    if (type === 'checkbox' || type === 'radio') { if (!el.checked) continue; value = el.value || 'checked'; }
-    else if (el.tagName === 'SELECT') value = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '';
-    else value = el.value || '';
-    out.push({
-      label: String(labelFor(el)).replace(/\\s+/g, ' ').trim().slice(0, 160),
-      value: String(value),
-      type,
-      multiline: el.tagName === 'TEXTAREA',
-      required: !!(el.required || el.getAttribute('aria-required') === 'true'),
-      maxLength: el.maxLength && el.maxLength > 0 ? el.maxLength : null,
-    });
-  }
-  return JSON.stringify({ url: location.href, fields: out });
-})()`;
+// The collector lives in lib/collect-fields.mjs so the pre-fill resolver and this
+// pre-submit gate always see the identical field shape.
+const COLLECT = COLLECT_EXPRESSION;
 
 async function cdp(path) {
   const res = await fetch(CDP + path);
@@ -110,12 +80,23 @@ function fail(msg, code = 2) {
   process.exit(code);
 }
 
-async function main() {
+async function collectFromStdin() {
+  let raw = '';
+  try { raw = readFileSync(0, 'utf8').trim(); } catch { /* no stdin */ }
+  if (!raw) fail('--stdin given but nothing on stdin');
+  try {
+    return parseCollected(raw);
+  } catch (e) {
+    fail(`bad stdin payload: ${e.message}`);
+  }
+}
+
+async function collectOverCdp() {
   let targets;
   try {
     targets = await cdp('/json/list');
   } catch {
-    fail('Chrome CDP not reachable on :9222');
+    fail('Chrome CDP not reachable on :9222 (use --collector + --stdin via the browser agent instead)');
   }
 
   let pages = targets.filter(t => t.type === 'page' && t.url && t.url.startsWith('http'));
@@ -138,6 +119,11 @@ async function main() {
   }
 
   if (!best || !best.fields.length) fail('no form fields found in any frame');
+  return best;
+}
+
+async function main() {
+  const best = useStdin ? await collectFromStdin() : await collectOverCdp();
 
   const rows = [];
   for (const f of best.fields) {

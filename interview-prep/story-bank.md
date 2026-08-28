@@ -23,8 +23,8 @@ This file accumulates your best interview stories over time. Each evaluation (Bl
 **Best for questions about:** System Design, High Performance, 0-1 Building, Startup Acquisition, Overcoming Resistance, MVPs, CRDTs vs OT.
 
 ### [Productivity & Scale] Developer Workflow Automation CLI & Central Caching Server
-**Source:** Report #009 — Accenture (Comcast Engineering) — Advanced Software Engineer
-**S (Situation):** Dozens of developers across Comcast's 16-microfrontend Xfinity monorepo (handling 3 million daily visits) were facing severe bottlenecks. Windows-native machines took up to **15 minutes** to run pre-commit ESLint checks (vs 1-2 mins on macOS), and environment setups for new hires took over a full day due to native OS package manager and routing conflicts.
+**Source:** IntelligentDX DevEx Tooling — Systems Engineer
+**S (Situation):** Dozens of developers across a 16-microfrontend enterprise monorepo (handling millions of daily visits) were facing severe bottlenecks. Windows-native machines took up to **15 minutes** to run pre-commit ESLint checks (vs 1-2 mins on macOS), and environment setups for new hires took over a full day due to native OS package manager and routing conflicts.
 **T (Task):** Dramatically optimize developer onboarding velocity and slash the pre-commit lint pipeline times to under 2 minutes across all operating systems.
 **A (Action):** Inspired by Turborepo/Lerna build caches, I proposed and engineered a custom centralized caching server storing file content hashes of clean lint states. Built a pre-commit proxy that calculates local file hashes and queries the cache; cache hits bypassed local lint execution entirely, only processing modified files. To solve setup friction, I wrote custom Go CLI utilities and standard WSL (Windows Subsystem for Linux) orchestration scripts to fully automate environment provisioning, mock API routing, and bypass `nvm-windows` limitations.
 **R (Result):** Windows linting times crashed from **15 minutes to <1 minute** (93%+ speedup). Local developer environment setup and provisioning collapsed from **1 day to exactly 1 hour** (87.5% reduction), saving 1+ hour daily per engineer.
@@ -68,8 +68,8 @@ This file accumulates your best interview stories over time. Each evaluation (Bl
 **Best for questions about:** DSL Compilers, Parsing, Graph Theory, Client-Side Performance, Web Workers, Sandbox Security, High-Performance Computations.
 
 ### [Architecture & Ambiguity] Command Pattern & Geolocation Incremental Demos
-**Source:** Project — Comcast Engineering — Advanced Software Engineer
-**S (Situation):** On Comcast's Geolocation (MBT) project, we faced highly ambiguous business logic and complex regional mapping rules that were constantly changing and poorly defined by business stakeholders.
+**Source:** Enterprise Systems Project — Advanced Software Engineer
+**S (Situation):** On a large-scale Geolocation (MBT) project, we faced highly ambiguous business logic and complex regional mapping rules that were constantly changing and poorly defined by business stakeholders.
 **T (Task):** Design a highly resilient frontend geolocation subsystem that could decouple complex, volatile business workflows from core UI/API integration points, and enable rapid iteration without massive refactoring.
 **A (Action):** Proposed and implemented the Command Pattern. I encapsulated distinct geolocation actions (e.g., region detection, fallback routing, user confirmation, cache invalidation) into discrete, interchangeable command objects sharing a unified interface. This allowed composing complex behavioral sequences on-the-fly and keeping the core execution decoupled. Because the business logic was so fluid, I used this decoupled architecture to spin up and present weekly small, clarified demo slices to business stakeholders to elicit explicit feedback.
 **R (Result):** Successfully delivered a highly stable geolocation module. The Command-pattern decoupling isolated changes, resulting in zero UI regressions during 5+ downstream business logic changes. Demoing incremental features clarified requirements directly, reducing overall development rework by 40%.
@@ -194,11 +194,11 @@ This file accumulates your best interview stories over time. Each evaluation (Bl
 **Reflection:** AI-native doesn't mean using Copilot for autocomplete — it means redesigning the workflow so AI handles compliance-like tasks (test coverage, linting, documentation generation) while humans own architecture and judgment. The division of labor is the design decision.
 **Best for questions about:** AI-Native Workflows, TDD, Testing Strategy, Human-AI Collaboration, Developer Productivity, karada.ai.
 
-### [Executive Presence] Comcast Architecture Review Board — ROI Quantification
-**Source:** Report #412 — Runlayer FDE — Accenture/Comcast project
-**S (Situation):** After building Go CLI tooling and a central linting cache for Comcast's 16-microfrontend monorepo, the improvements existed but hadn't been formally recognized or approved for wider rollout. The architecture review board was a senior technical audience skeptical of "DevEx improvements" without hard numbers.
+### [Executive Presence] Enterprise Architecture Review Board — ROI Quantification
+**Source:** IntelligentDX / Enterprise Client Project
+**S (Situation):** After building Go CLI tooling and a central linting cache for a 16-microfrontend monorepo, the improvements existed but hadn't been formally recognized or approved for wider rollout. The architecture review board was a senior technical audience skeptical of "DevEx improvements" without hard numbers.
 **T (Task):** Present the ROI of the developer tooling to senior technical stakeholders and get approved for rollout across the full engineering org.
 **A (Action):** Built a quantified ROI narrative with precise before/after metrics: local setup 1 day to 1 hour (87.5% reduction), linting time 15 minutes to under 1 minute (93% reduction), estimated 1 hour per engineer per day recovered. Structured the presentation around the board's concerns (reliability, adoption risk, maintenance overhead) rather than the engineering excitement. Ran a live demo showing the cache hit path, explained the fallback, and showed the implementation was already tested in production.
-**R (Result):** Got greenlit for rollout across the full 16-service monorepo. The tooling became the standard local setup path for the Comcast Xfinity engineering team.
+**R (Result):** Got greenlit for rollout across the full 16-service monorepo. The tooling became the standard local setup path for the engineering team.
 **Reflection:** Technical credibility with senior engineers comes from precision, not enthusiasm. "15 minutes to under 1 minute" creates trust faster than "massively faster." Numbers are not decoration — they are the argument. Walk into any executive technical room knowing your exact before/after deltas.
 **Best for questions about:** Executive Presence, Technical Communication, DevEx, ROI, Stakeholder Buy-in, Enterprise Engineering, Go CLI.

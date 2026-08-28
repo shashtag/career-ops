@@ -1,0 +1,234 @@
+// tests/answer-resolver.test.mjs — unit coverage for lib/answer-store.mjs, the
+// pure decision layer behind form filling. The browser side is deliberately not
+// exercised here: the whole point of this module is that deciding *what to say*
+// needs no browser at all.
+import { pass, fail, ROOT } from './helpers.mjs';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
+
+console.log('\nanswer-store.mjs (label -> canonical answer)');
+
+const mod = await import(pathToFileURL(join(ROOT, 'lib', 'answer-store.mjs')).href);
+const { normalizeLabel, interpolate, scoreMatch, matchOption, resolveField, summarize, loadStore } = mod;
+
+// --- normalizeLabel -------------------------------------------------------
+if (normalizeLabel('  **Expected  CTC**  ') === 'expected ctc') pass('normalizeLabel strips markdown and collapses whitespace');
+else fail(`normalizeLabel got "${normalizeLabel('  **Expected  CTC**  ')}"`);
+
+if (normalizeLabel('Authorized in the U.S.?').includes('u.s.')) pass('normalizeLabel preserves "u.s." so country matching works');
+else fail('normalizeLabel must not strip periods from u.s.');
+
+// --- interpolate ----------------------------------------------------------
+const profile = { candidate: { email: 'a@b.com', nested: { deep: 'x' } } };
+if (interpolate('${profile.candidate.email}', profile) === 'a@b.com') pass('interpolate resolves a profile path');
+else fail('interpolate failed on a simple path');
+if (interpolate('${profile.candidate.nested.deep}', profile) === 'x') pass('interpolate resolves a deep path');
+else fail('interpolate failed on a deep path');
+if (interpolate('${profile.does.not.exist}', profile) === '${profile.does.not.exist}') pass('interpolate leaves unknown paths literal');
+else fail('interpolate should leave unknown paths untouched');
+
+// --- scoreMatch: specificity ---------------------------------------------
+const generic = { any: ['authorized to work'] };
+const qualified = { any: ['authorized to work'], require: ['india'] };
+const label = normalizeLabel('Are you legally authorized to work in India?');
+if (scoreMatch(qualified, label) > scoreMatch(generic, label)) pass('a country-qualified entry outscores a generic one');
+else fail('specificity ordering is broken — this is the work-auth inversion bug');
+
+if (scoreMatch({ any: ['sponsorship'], exclude: ['india'] }, normalizeLabel('Do you need sponsorship in India?')) === null) {
+  pass('exclude terms veto a match');
+} else fail('exclude did not veto');
+
+if (scoreMatch({ any: ['visa'], require: ['canada'] }, normalizeLabel('Do you need a visa?')) === null) {
+  pass('a missing require term rejects the entry');
+} else fail('require term was not enforced');
+
+if (scoreMatch({ any: ['nothing here'] }, label) === null) pass('no any-term hit means no match');
+else fail('empty any-hit should not match');
+
+// --- matchOption ----------------------------------------------------------
+if (matchOption('Yes', ['Yes', 'No']).how === 'exact') pass('matchOption finds an exact option');
+else fail('matchOption missed an exact hit');
+
+if (matchOption('yes', ['Yes', 'No']).option === 'Yes') pass('matchOption is case-insensitive');
+else fail('matchOption should ignore case');
+
+const amb = matchOption('Yes', ['Yes, with conditions', 'Yes', 'No']);
+if (amb.option === 'Yes') pass('matchOption prefers the shortest containing option');
+else fail(`matchOption picked "${amb.option}" over the exact "Yes"`);
+
+if (matchOption('Male', ['Female', 'Non-binary']).option === null) pass('matchOption returns null when nothing fits');
+else fail('matchOption invented an option');
+
+if (matchOption('I am not a protected veteran', ['I identify as a protected veteran', 'I am not a protected veteran', 'I prefer not to answer']).how === 'exact') {
+  pass('matchOption handles long EEOC option text');
+} else fail('matchOption failed on EEOC-style options');
+
+// --- resolveField against the real store ----------------------------------
+let store;
+try {
+  store = loadStore();
+  pass('loadStore reads config/application-answers.yml');
+} catch (e) {
+  fail(`loadStore failed: ${e.message}`);
+}
+
+if (store) {
+  const f = (label, extra = {}) => resolveField({ label, type: 'text', options: [], required: true, ...extra }, store);
+
+  const india = f('Are you legally authorized to work in India?');
+  const us = f('Are you legally authorized to work in the United States?');
+  if (india.answer === 'Yes' && us.answer === 'No') pass('work authorization resolves per country, not inverted');
+  else fail(`work auth inverted: india=${india.answer} us=${us.answer}`);
+
+  const ctc = f('Expected CTC');
+  const cur = f('Current CTC');
+  if (ctc.answer !== cur.answer) pass('expected and current CTC resolve to different values');
+  else fail('expected CTC collided with current CTC');
+
+  if (f('Email Address').id === 'email') pass('identity fields resolve');
+  else fail('email did not resolve');
+
+  const port = f('Personal website');
+  if (port.id === 'portfolio') pass('portfolio resolves and does not collide with linkedin/github');
+  else fail(`personal website resolved to ${port.id}`);
+
+  const li = f('LinkedIn Profile URL');
+  if (li.id === 'linkedin') pass('linkedin beats the generic website entry');
+  else fail(`linkedin resolved to ${li.id}`);
+
+  // Long-form routing: a textarea must consult the essay bank first.
+  const why = resolveField({ label: 'Why do you want to work here?', type: 'textarea', multiline: true, options: [], required: true }, store);
+  if (why.status === 'generate' && why.id === 'why_company') pass('"why us" is routed to generate, never to stored text');
+  else fail(`"why us" resolved to ${why.status}/${why.id} — it must never be pasted from store`);
+
+  const stack = resolveField({ label: 'What is your tech stack?', type: 'textarea', multiline: true, options: [], required: true }, store);
+  if (stack.status === 'essay' && stack.adapt === 'none') pass('reusable essays come back verbatim-safe');
+  else fail(`tech stack resolved to ${stack.status}/${stack.adapt}`);
+
+  const rt = resolveField({ label: 'Describe your real-time systems experience', type: 'textarea', multiline: true, options: [], required: true }, store);
+  if (rt.status === 'essay' && rt.adapt === 'required') pass('company-tailored essays are flagged adapt: required');
+  else fail(`realtime essay adapt flag is ${rt.adapt}`);
+
+  // Option-constrained resolution.
+  const withOpts = resolveField({ label: 'Are you legally authorized to work in India?', type: 'select', options: ['Yes', 'No'], required: true }, store);
+  if (withOpts.option === 'Yes' && withOpts.status === 'resolved') pass('resolved answers map onto the field\'s real options');
+  else fail(`option mapping failed: ${JSON.stringify(withOpts)}`);
+
+  const impossible = resolveField({ label: 'Are you legally authorized to work in India?', type: 'select', options: ['Maybe', 'Unclear'], required: true }, store);
+  if (impossible.status === 'unresolved') pass('an answer that fits no option degrades to unresolved instead of guessing');
+  else fail('resolver guessed an option it should have refused');
+
+  const junk = f('What is your favourite Pokemon?');
+  if (junk.status === 'unresolved') pass('unknown labels come back unresolved, not fabricated');
+  else fail(`unknown label resolved to ${junk.id}`);
+
+  // --- summarize ----------------------------------------------------------
+  const counts = summarize([
+    { field: { required: true }, resolution: { status: 'resolved' } },
+    { field: { required: true }, resolution: { status: 'unresolved' } },
+    { field: { required: false }, resolution: { status: 'unresolved' } },
+    { field: { required: true }, resolution: { status: 'generate' } },
+  ]);
+  if (counts.total === 4 && counts.requiredBlockers === 2) pass('summarize counts required blockers only');
+  else fail(`summarize got ${JSON.stringify(counts)}`);
+}
+
+// --- parseCollected: the unrendered-form guard -----------------------------
+// Measured live: an Ashby form reported 0 fields at t=0 and 10 fields 3s later.
+// An empty dump used to sail through the pre-submit audit as "All fields clean".
+{
+  const cf = await import(pathToFileURL(join(ROOT, 'lib', 'collect-fields.mjs')).href);
+  let threw = false;
+  try { cf.parseCollected('{"url":"u","fields":[]}'); } catch { threw = true; }
+  if (threw) pass('parseCollected refuses an empty field list (form not rendered)');
+  else fail('an empty form dump must never be accepted — it passes the submit gate as clean');
+
+  let threw2 = false;
+  try { cf.parseCollected('{"url":"u"}'); } catch { threw2 = true; }
+  if (threw2) pass('parseCollected refuses a payload with no fields[] array');
+  else fail('missing fields[] must throw');
+
+  const ok = cf.parseCollected('{"url":"u","fields":[{"label":"Email","value":""}]}');
+  if (ok.fields.length === 1) pass('parseCollected accepts a real dump');
+  else fail('parseCollected rejected a valid dump');
+
+  if (/role="combobox"/.test(cf.COLLECT_EXPRESSION)) pass('collector detects role=combobox controls');
+  else fail('collector must handle combobox inputs — real ATS forms have zero native <select>');
+
+  try { new Function('return ' + cf.COLLECT_EXPRESSION); pass('COLLECT_EXPRESSION parses as valid JS'); }
+  catch (e) { fail(`COLLECT_EXPRESSION is not valid JS: ${e.message}`); }
+}
+
+// --- combobox interaction --------------------------------------------------
+if (store) {
+  const combo = resolveField({
+    label: 'Are you legally authorized to work in India?',
+    type: 'text', combobox: true, options: [], required: true, multiline: false,
+  }, store);
+  if (combo.interaction === 'combobox') pass('a combobox is flagged as open-and-click, not type');
+  else fail('combobox field was not flagged — the agent would type into it and the submit would bounce');
+  if (combo.confidence === 'medium') pass('an unverifiable combobox selection is downgraded to medium confidence');
+  else fail(`combobox confidence was ${combo.confidence}, expected medium`);
+
+  const comboWithOpts = resolveField({
+    label: 'Are you legally authorized to work in India?',
+    type: 'text', combobox: true, options: ['Yes', 'No'], required: true, multiline: false,
+  }, store);
+  if (comboWithOpts.option === 'Yes' && comboWithOpts.interaction === 'combobox') {
+    pass('a combobox with discoverable options still validates the option');
+  } else fail(`combobox+options resolved to ${JSON.stringify(comboWithOpts)}`);
+}
+
+// --- statuses discovered on a LIVE Greenhouse form (Anthropic, 2026-08-28) ----
+if (store) {
+  const at = (label, extra = {}) => resolveField({ label, type: 'text', options: [], required: true, multiline: false, ...extra }, store);
+
+  if (at('Attach', { type: 'file' }).status === 'file') pass('a file input resolves to `file`, not an unknown question');
+  else fail('resume upload must not come back as unresolved');
+
+  for (const l of ['Please read the arbitration agreement below*', 'Agreement to Arbitrate*',
+                   'I agree to the Terms and Conditions', 'I acknowledge the privacy policy',
+                   'I certify the information is accurate', 'Electronic Signature']) {
+    if (at(l).status !== 'consent') { fail(`consent gate missed: ${l}`); break; }
+  }
+  if (at('Agreement to Arbitrate*').status === 'consent' && at('Please read the arbitration agreement below*').status === 'consent') {
+    pass('legal agreements are flagged `consent` and never auto-answered');
+  }
+
+  // The consent net must not swallow ordinary questions.
+  if (at('Email').status === 'resolved' && at('Expected CTC').status === 'resolved'
+      && at('Are you legally authorized to work in India?').status === 'resolved') {
+    pass('consent detection does not hijack ordinary fields');
+  } else fail('consent regex is over-broad — it captured a normal field');
+
+  const c = summarize([{ field: { required: true }, resolution: { status: 'consent' } }]);
+  if (c.requiredBlockers === 1) pass('a required consent gate counts as a blocker');
+  else fail('required consent must block the run');
+}
+
+// --- Greenhouse renders a combobox plus an inert backing input ---------------
+{
+  const cf = await import(pathToFileURL(join(ROOT, 'lib', 'collect-fields.mjs')).href);
+  const twins = [
+    { label: 'Agreement to Arbitrate*', value: '', type: 'text', required: true, combobox: true, options: [] },
+    { label: 'Agreement to Arbitrate*', value: '', type: 'text', required: true, combobox: false, options: [] },
+  ];
+  const deduped = cf.dedupeFields(twins);
+  if (deduped.length === 1 && deduped[0].combobox === true) pass('the inert backing input is dropped, the combobox kept');
+  else fail(`dedupeFields returned ${deduped.length} rows, combobox=${deduped[0]?.combobox}`);
+
+  // Two genuinely distinct fields that share a label must survive.
+  const distinct = cf.dedupeFields([
+    { label: 'Email', value: 'a@b.com', type: 'text', combobox: false, options: [] },
+    { label: 'Email', value: 'c@d.com', type: 'text', combobox: false, options: [] },
+  ]);
+  if (distinct.length === 2) pass('dedupe does not collapse two real fields sharing a label');
+  else fail('dedupe was too aggressive');
+
+  const req = cf.dedupeFields([
+    { label: 'Country', value: '', type: 'text', required: false, combobox: true, options: [] },
+    { label: 'Country', value: '', type: 'text', required: true, combobox: false, options: [] },
+  ]);
+  if (req[0].required === true) pass('dedupe inherits `required` from either twin');
+  else fail('dedupe lost the required flag');
+}

@@ -1246,6 +1246,9 @@ async function main() {
   const openTabUrls = await fetchOpenTabUrls();
   sweepStaleClaims(openTabUrls);
   let evaluatedCount = 0;
+  // Jobs that scored >=4.0 with a PDF on disk — evaluated, not yet filled.
+  // The agent picks these up; nothing here opens a browser.
+  const readyToApply = [];
   let expiredCount = 0;
   let skippedCount = 0;
 
@@ -1680,20 +1683,21 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
 
             const appId = findTrackerIdByReport(filename);
             if (appId) {
-              console.log(`\n🚀 Autonomous Pipeline: Launching Apply Automator for application #${appId}...`);
-              // Autonomous submission is enabled (modes/_custom.md "Submitting").
-              // argSubmit defaults to true, so omitting --no-submit lets the
-              // automator complete the application rather than parking it.
-              const applyArgs = ['scratch/apply_automator.mjs', '--id', appId, '--non-interactive'];
-              spawnSync('node', applyArgs, { stdio: 'inherit', cwd: ROOT });
-
-              // Whatever the outcome, the form now lives in a browser tab. Hand
-              // the claim over to that tab so it outlives this run: another run
-              // must not touch it while it's open, and it frees ~24h after the
-              // tab goes away (closed by mistake, browser restarted).
-              const idx = claimedThisRun.findIndex(c => c.jobId === url);
-              if (idx !== -1) claimedThisRun.splice(idx, 1);
-              holdForOpenTab(url, { url, note: `#${appId} ${company} | ${role}` });
+              // Hand off to the agent rather than spawning a filler. Since
+              // 2026-08-27 the browser agent drives the DOM and code only decides
+              // what to say (answer-resolver.mjs) and checks it (audit-form-fill.mjs).
+              // apply_automator.mjs is retired: spawning it here would exit 2.
+              console.log(`\n${colors.bright}${colors.green}READY TO APPLY — #${appId} ${company} | ${role}${colors.reset}`);
+              console.log(`  ${url}`);
+              console.log('  Agent takes it from here (modes/_run.md step 2):');
+              console.log('    node answer-resolver.mjs --collector          # evaluate in the form frame');
+              console.log('    node answer-resolver.mjs --stdin --summary    # what to answer');
+              console.log('    <agent fills>');
+              console.log('    node audit-form-fill.mjs --stdin --summary    # must exit 0');
+              console.log('    <agent submits, once>');
+              readyToApply.push({ appId, url, company, role, score });
+              // The working claim stays with this run: no tab exists yet, so
+              // handing it to holdForOpenTab would park a claim on nothing.
             } else {
               console.warn(`${colors.yellow}⚠️ Could not locate application ID in applications.md for reports/${filename}. Skipping automator launch.${colors.reset}`);
             }
@@ -1704,6 +1708,12 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
       } else {
         skippedCount++;
       }
+    }
+
+    if (readyToApply.length) {
+      console.log(`\n--- Ready to apply (${readyToApply.length}) ---`);
+      for (const r of readyToApply) console.log(`  #${r.appId}  ${r.score}/5  ${r.company} | ${r.role}`);
+      console.log('  Work ONE per run: modes/_run.md step 2.');
     }
 
     console.log('\n--- Summary statistics ---');
