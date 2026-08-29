@@ -46,7 +46,7 @@ const OPENROUTER_API_URL    = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const MAX_TOKENS            = 8192;
 const RATE_LIMIT_DELAY_MS   = 2500;  // pause between requests on free tier
-const MODEL_TIMEOUT_MS      = 15_000; // abort a single model call after 15 s
+const MODEL_TIMEOUT_MS      = parseInt(process.env.OPENROUTER_TIMEOUT_MS, 10) || 60_000; // default 60s timeout for complex prompts
 
 // Provider priority order — models are sorted by provider prefix, not hardcoded names.
 // Add, remove, or reorder providers here; model names are resolved at runtime from the API.
@@ -289,10 +289,19 @@ async function callOpenRouter(systemPrompt, userMessage) {
           const is403     = msg.includes('HTTP 403');
       const isTimeout = msg.startsWith('Timeout');
       const is429     = msg.includes('HTTP 429') || msg.includes('rate-li') || msg.includes('rate limit') || msg.includes('temporarily rate');
-      if (is403 || isTimeout) {
+      if (is403) {
         blacklistedModels.add(model);
         saveBlacklist(blacklistedModels);
         console.log(`SKIP (blacklisted: ${msg})`);
+      } else if (isTimeout) {
+        rateLimitCounts[model] = (rateLimitCounts[model] ?? 0) + 1;
+        if (rateLimitCounts[model] >= 3) {
+          blacklistedModels.add(model);
+          saveBlacklist(blacklistedModels);
+          console.log(`SKIP (auto-blacklisted: persistent timeout)`);
+        } else {
+          console.log(`FAILED (${msg} [${rateLimitCounts[model]}/3]) — rotating model`);
+        }
       } else if (is429) {
         rateLimitCounts[model] = (rateLimitCounts[model] ?? 0) + 1;
         if (rateLimitCounts[model] >= 3) {
@@ -729,14 +738,16 @@ async function cmdEvaluate(input, ctx) {
   const legitLine  = legitMatch ? `**Legitimacy:** ${legitMatch[1].trim()}` : '**Legitimacy:** unconfirmed';
   writeFile(relPath, `**URL:** ${input || '(pasted)'}\n${legitLine}\n\n${result}`);
 
-    const scoreMatch  = result.match(/(?:score|puntuaci[oó]n)[^\d]*(\d+\.?\d*)/i);
+  const scoreMatch  = result.match(/\*\*Score:\*\*\s*(\d+\.?\d*)/i) ||
+                      result.match(/Score:[^\d]*(\d+\.?\d*)/i) ||
+                      result.match(/(?:score|puntuaci[oó]n)[^\d]*(\d+\.?\d*)/i);
   const scoreValue  = scoreMatch ? parseFloat(scoreMatch[1]) : NaN;
   const scoreStr    = isFinite(scoreValue) ? `${scoreValue.toFixed(1)}/5` : '';
   const companyName = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const reportLink  = `[${numStr}](reports/${numStr}-${slug}-${today}.md)`;
   const tsvLine     = `${num}\t${today}\t${companyName}\t(see report)\tEvaluated\t${scoreStr}\t❌\t${reportLink}\t\n`;
   const tsvFile     = `batch/tracker-additions/or-${numStr}-${slug}.tsv`;
-  writeFile(tsvFile, `num\tdate\tcompany\trole\tstatus\tscore\tpdf\treport\tnotes\n${tsvLine}`);
+  writeFile(tsvFile, tsvLine);
 
   console.log(`\n✅ Report saved: ${relPath}`);
   console.log('\n─── EVALUATION ──────────────────────────────────────\n');

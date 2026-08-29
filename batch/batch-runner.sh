@@ -513,40 +513,26 @@ process_offer() {
   prompt="$prompt Date: $date"
   prompt="$prompt Batch ID: $id"
 
+  # Prepare system prompt with static base + runtime personalization (cached across workers)
+  local resolved_prompt="$BATCH_DIR/.resolved-system-prompt.md"
+  if [[ ! -f "$resolved_prompt" ]]; then
+    cp "$PROMPT_FILE" "$resolved_prompt"
+    # Inject user-layer personalization into the temporary worker prompt.
+    # The resolved prompt is gitignored runtime state, so user profile data stays
+    # out of the system layer while batch scoring matches interactive scoring.
+    for context_file in "$PROJECT_DIR/modes/_profile.md" "$PROJECT_DIR/config/profile.yml" "$PROJECT_DIR/modes/_custom.md"; do
+      if [[ -f "$context_file" ]]; then
+        {
+          printf '\n\n---\n\n'
+          printf '## Runtime personalization: %s\n\n' "${context_file#"$PROJECT_DIR/"}"
+          sed 's/^/    /' "$context_file"
+          printf '\n'
+        } >> "$resolved_prompt"
+      fi
+    done
+  fi
+
   local log_file="$LOGS_DIR/${report_num}-${id}.log"
-
-  # Prepare system prompt with placeholders resolved
-  local resolved_prompt="$BATCH_DIR/.resolved-prompt-${id}.md"
-  # Escape sed delimiter characters in variables to prevent substitution breakage
-  local esc_url esc_jd_file esc_report_num esc_date esc_id
-  esc_url="${url//\\/\\\\}"
-  esc_url="${esc_url//|/\\|}"
-  esc_jd_file="${jd_file//\\/\\\\}"
-  esc_jd_file="${esc_jd_file//|/\\|}"
-  esc_report_num="${report_num//|/\\|}"
-  esc_date="${date//|/\\|}"
-  esc_id="${id//|/\\|}"
-  sed \
-    -e "s|{{URL}}|${esc_url}|g" \
-    -e "s|{{JD_FILE}}|${esc_jd_file}|g" \
-    -e "s|{{REPORT_NUM}}|${esc_report_num}|g" \
-    -e "s|{{DATE}}|${esc_date}|g" \
-    -e "s|{{ID}}|${esc_id}|g" \
-    "$PROMPT_FILE" > "$resolved_prompt"
-
-  # Inject user-layer personalization into the temporary worker prompt.
-  # The resolved prompt is gitignored runtime state, so user profile data stays
-  # out of the system layer while batch scoring matches interactive scoring.
-  for context_file in "$PROJECT_DIR/modes/_profile.md" "$PROJECT_DIR/config/profile.yml" "$PROJECT_DIR/modes/_custom.md"; do
-    if [[ -f "$context_file" ]]; then
-      {
-        printf '\n\n---\n\n'
-        printf '## Runtime personalization: %s\n\n' "${context_file#"$PROJECT_DIR/"}"
-        sed 's/^/    /' "$context_file"
-        printf '\n'
-      } >> "$resolved_prompt"
-    fi
-  done
 
   # Launch claude -p worker.
   # The model is resolved once per run from spend_tier unless --model was

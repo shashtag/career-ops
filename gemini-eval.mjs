@@ -159,11 +159,14 @@ function readFile(path, label) {
 function nextReportNumber() {
   if (!existsSync(PATHS.reports)) return '001';
   const files = readdirSync(PATHS.reports)
-    .filter(f => /^\d{3}-/.test(f))
-    .map(f => parseInt(f.slice(0, 3)))
+    .map(f => {
+      const m = f.match(/^(\d+)-/);
+      return m ? parseInt(m[1], 10) : NaN;
+    })
     .filter(n => !isNaN(n));
   if (files.length === 0) return '001';
-  return String(Math.max(...files) + 1).padStart(3, '0');
+  const nextNum = Math.max(...files) + 1;
+  return String(nextNum).padStart(3, '0');
 }
 
 function validateEvaluationShape(text) {
@@ -288,13 +291,33 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 `;
 
 // ---------------------------------------------------------------------------
+// Text Sanitization Helper
+// ---------------------------------------------------------------------------
+export function sanitizeJdText(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+  // Remove standard EEO and compliance boilerplates
+  cleaned = cleaned.replace(/(?:equal opportunity employer|affirmative action|eeo\b|we celebrate diversity|all qualified applicants will receive consideration for employment without regard)[\s\S]*?(?=\n\n|\n[A-Z#]|$)/gi, '');
+  // Remove cookie banner notices and privacy policy blurbs
+  cleaned = cleaned.replace(/(?:we use cookies|cookie policy|manage preferences|applicant privacy notice)[\s\S]*?(?=\n\n|$)/gi, '');
+  // Normalize whitespace: collapse horizontal whitespace and excessive newlines
+  cleaned = cleaned.replace(/[ \t\u00a0]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  if (cleaned.length > 16_000) {
+    cleaned = cleaned.slice(0, 16_000) + '\n\n[...JD truncated for length...]';
+  }
+  return cleaned;
+}
+
+// ---------------------------------------------------------------------------
 // Call Gemini API
 // ---------------------------------------------------------------------------
 console.log(`🤖  Calling Gemini (${modelName})... this may take 30-60 seconds.\n`);
 
+const cleanJd = sanitizeJdText(jdText);
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({
   model: modelName,
+  systemInstruction: systemPrompt,
   generationConfig: {
     temperature: 0.4,      // deterministic enough for structured evaluation
     maxOutputTokens: 8192, // full 7-block evaluation
@@ -303,10 +326,7 @@ const model = genAI.getGenerativeModel({
 
 let evaluationText;
 try {
-  const result = await model.generateContent([
-    { text: systemPrompt },
-    { text: `\n\nJOB DESCRIPTION TO EVALUATE:\n\n${jdText}` },
-  ]);
+  const result = await model.generateContent(`JOB DESCRIPTION TO EVALUATE:\n\n${cleanJd}`);
   evaluationText = result.response.text();
 } catch (err) {
   const sanitizedMsg = (err.message || '').split(apiKey).join('[REDACTED]');

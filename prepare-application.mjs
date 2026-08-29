@@ -21,6 +21,7 @@
 import { readFileSync, existsSync, statSync } from 'fs';
 import { basename, resolve, dirname, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
+import yaml from 'js-yaml';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -130,24 +131,22 @@ function detectAts(url) {
 function readProfile() {
   const profilePath = resolve(ROOT, 'config/profile.yml');
   if (!existsSync(profilePath)) return {};
-  const raw = readFileSync(profilePath, 'utf-8');
-
-  const pick = (key) => {
-    const m = raw.match(new RegExp(`^\\s*${key}:\\s*["']?([^"'\\n]+?)["']?\\s*$`, 'm'));
-    return m ? m[1].trim() : '';
-  };
-
-  const fullName = pick('full_name');
-  const [firstName, ...rest] = fullName.split(' ');
-  return {
-    firstName:    firstName || '',
-    lastName:     rest.join(' ') || '',
-    email:        pick('email'),
-    phone:        pick('phone'),
-    location:     pick('location'),
-    linkedin:     pick('linkedin'),
-    portfolioUrl: pick('portfolio_url'),
-  };
+  try {
+    const data = yaml.load(readFileSync(profilePath, 'utf-8')) || {};
+    const fullName = String(data.full_name || data.candidate?.name || '').trim();
+    const [firstName, ...rest] = fullName.split(' ');
+    return {
+      firstName:    firstName || '',
+      lastName:     rest.join(' ') || '',
+      email:        String(data.email || data.candidate?.email || '').trim(),
+      phone:        String(data.phone || data.candidate?.phone || '').trim(),
+      location:     String(data.location || data.candidate?.location || '').trim(),
+      linkedin:     String(data.linkedin || data.candidate?.linkedin || '').trim(),
+      portfolioUrl: String(data.portfolio_url || data.candidate?.portfolio || '').trim(),
+    };
+  } catch {
+    return {};
+  }
 }
 
 // ── Cover letter reader (optional) ────────────────────────────────────

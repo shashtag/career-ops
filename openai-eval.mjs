@@ -259,6 +259,23 @@ LEGITIMACY: <High Confidence | Proceed with Caution | Suspicious>
 `;
 
 // ---------------------------------------------------------------------------
+// Text Sanitization Helper
+// ---------------------------------------------------------------------------
+export function sanitizeJdText(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+  cleaned = cleaned.replace(/(?:equal opportunity employer|affirmative action|eeo\b|we celebrate diversity|all qualified applicants will receive consideration for employment without regard)[\s\S]*?(?=\n\n|\n[A-Z#]|$)/gi, '');
+  cleaned = cleaned.replace(/(?:we use cookies|cookie policy|manage preferences|applicant privacy notice)[\s\S]*?(?=\n\n|$)/gi, '');
+  cleaned = cleaned.replace(/[ \t\u00a0]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  if (cleaned.length > 16_000) {
+    cleaned = cleaned.slice(0, 16_000) + '\n\n[...JD truncated for length...]';
+  }
+  return cleaned;
+}
+
+const cleanJd = sanitizeJdText(jdText);
+
+// ---------------------------------------------------------------------------
 // Call the OpenAI-compatible endpoint
 // ---------------------------------------------------------------------------
 const timeoutMs = parseInt(process.env.OPENAI_TIMEOUT_MS || '300000', 10);
@@ -282,7 +299,7 @@ try {
       model:    modelName,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user',   content: `JOB DESCRIPTION TO EVALUATE:\n\n${jdText}` },
+        { role: 'user',   content: `JOB DESCRIPTION TO EVALUATE:\n\n${cleanJd}` },
       ],
       stream:      false,
       temperature: 0.4,
@@ -360,7 +377,7 @@ if (saveReport) {
 
     const num         = nextReportNumber();
     const today       = new Date().toISOString().split('T')[0];
-    const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
     const filename    = `${num}-${companySlug}-${today}.md`;
     const reportPath  = join(PATHS.reports, filename);
 

@@ -104,11 +104,9 @@ Use the bounded research budget above for:
 - Company's compensation reputation
 - Demand trend for the role
 
-Before interpreting any salary number, classify the company type. Public compensation ranges are not equally reliable across company categories.
+Before interpreting any salary, classify the **company type / hiring entity**. A public salary figure is a signal, not a contractual promise.
 
 **Company type classification (required):**
-
-Classify the employer into the closest category and state the confidence level:
 
 | Company type | Typical comp reliability | Signals |
 |--------------|--------------------------|---------|
@@ -118,14 +116,12 @@ Classify the employer into the closest category and state the confidence level:
 | Enterprise / traditional corporate | Medium | Formal HR process, stable base, slower bands, bonus may be discretionary |
 | Agency / outsourcing / consulting vendor | Medium to low | Client allocation, project-based work, billability pressure, variable bonus |
 | Local SMB / service business | Low | Small company, broad role, informal HR, "comprehensive salary" language |
-| Sales / commission-heavy org | Low unless base is explicit | "OTE", "uncapped", commission, performance bonus, target-based pay |
+| Sales / commission-heavy org | Low unless base is explicit | OTE, uncapped commission, performance bonus, target-based pay |
 | Recruiter / staffing listing | Low to medium | Third-party posting, range may reflect client budget rather than offer terms |
 | Government / academic / nonprofit | Medium to high | Published grades/bands, but lower market competitiveness |
 | Open-source community / education community | Medium to low | Community-led org, foundation/association sponsor, campus/community operations, unclear employment entity |
 
-If the company type is uncertain, mark it as `Unknown` and default compensation reliability to the conservative canonical tier: `Low` until evidence improves it.
-
-If the brand differs from the legal employer or posting entity, classify the **actual contract / hiring entity** first and mention the brand relationship separately. Example: a "Datawhale community" role posted by an association, school, vendor, or partner should be classified by that hiring entity, not by the Datawhale brand alone.
+If the brand differs from the legal employer or posting entity, classify the **actual contract / hiring entity** first and mention the brand relationship separately. If the company type is uncertain, mark it as `Unknown` and default compensation reliability to the conservative canonical tier: `Low` until evidence improves it.
 
 **Compensation reliability (required):**
 
@@ -142,16 +138,7 @@ When an advertised salary figure exists, split compensation into:
 - **Expected stable cash:** what is likely recurring and reliable in cash, before tax unless local data supports a net estimate; exclude benefits
 - **Non-cash benefits:** equity, insurance, pension, meals, transport, wellness, learning budget, equipment, or other benefits that are not guaranteed cash
 
-Add a reliability tier:
-
-| Tier | Meaning |
-|------|---------|
-| High | Salary is stated as base or backed by structured public bands / multiple consistent sources |
-| Medium | Range is plausible but components are not fully separated |
-| Low | Public number likely includes variable, attendance, commission, subsidy, or "up to" components |
-| Unknown | No usable salary data |
-
-Treat these phrases as low-reliability signals unless the fixed base is explicitly separated: "comprehensive salary", "total package", "up to", "OTE", "uncapped", "including allowances", "performance bonus included", "attendance bonus", "KPI bonus", "base + variable", "base + commission", "13th salary included", or unusually wide salary ranges.
+Apply the reliability tier (High, Medium, Low, Unknown per `_shared.md`). Treat these phrases as low-reliability signals unless the fixed base is explicitly separated: "comprehensive salary", "total package", "up to", "OTE", "uncapped", "including allowances", "performance bonus included", "attendance bonus", "KPI bonus", "base + variable", "base + commission", "13th salary included", or unusually wide salary ranges.
 
 When the advertised number may be inflated, say so plainly. Example: `Advertised 5k may represent 3k base + attendance / KPI / subsidy components; verify contract base before treating it as a 5k role.`
 

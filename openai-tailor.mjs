@@ -110,7 +110,22 @@ if (!existsSync(reportPath)) {
   process.exit(1);
 }
 
-const jdText = readFileSync(jdPath, 'utf-8').trim();
+// ---------------------------------------------------------------------------
+// Text Sanitization Helper
+// ---------------------------------------------------------------------------
+export function sanitizeJdText(text) {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+  cleaned = cleaned.replace(/(?:equal opportunity employer|affirmative action|eeo\b|we celebrate diversity|all qualified applicants will receive consideration for employment without regard)[\s\S]*?(?=\n\n|\n[A-Z#]|$)/gi, '');
+  cleaned = cleaned.replace(/(?:we use cookies|cookie policy|manage preferences|applicant privacy notice)[\s\S]*?(?=\n\n|$)/gi, '');
+  cleaned = cleaned.replace(/[ \t\u00a0]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  if (cleaned.length > 16_000) {
+    cleaned = cleaned.slice(0, 16_000) + '\n\n[...JD truncated for length...]';
+  }
+  return cleaned;
+}
+
+const jdText = sanitizeJdText(readFileSync(jdPath, 'utf-8'));
 const reportText = readFileSync(reportPath, 'utf-8').trim();
 
 // Attempt to parse company slug and candidate name

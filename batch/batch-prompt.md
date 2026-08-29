@@ -63,15 +63,14 @@ Conflict rule: `modes/_profile.md` wins over default system guidance because it 
 
 ---
 
-## Orchestrator Placeholders
+## Target Offer Parameters
 
-| Placeholder | Meaning |
-|-------------|---------|
-| `{{URL}}` | Job URL |
-| `{{JD_FILE}}` | Local file containing the JD text |
-| `{{REPORT_NUM}}` | 3-digit report number, zero-padded |
-| `{{DATE}}` | Current date, YYYY-MM-DD |
-| `{{ID}}` | Unique offer ID from `batch-input.tsv` |
+The worker receives the target offer details in the user prompt (or via placeholders):
+- `URL` / `{{URL}}`: Job URL
+- `JD file` / `{{JD_FILE}}`: Local file path containing the JD text
+- `Report number` / `{{REPORT_NUM}}`: 3-digit report number, zero-padded
+- `Date` / `{{DATE}}`: Current date, YYYY-MM-DD
+- `Batch ID` / `{{ID}}`: Unique offer ID from `batch-input.tsv`
 
 ---
 
@@ -81,8 +80,8 @@ Run these steps in order.
 
 ### Step 1 — Load the JD
 
-1. Read `{{JD_FILE}}`.
-2. If the file is empty or missing, try to fetch the JD from `{{URL}}` with WebFetch.
+1. Read the local JD text file specified by `JD file` (or `{{JD_FILE}}`).
+2. If the file is empty or missing, try to fetch the JD from `URL` (or `{{URL}}`) with WebFetch.
 3. If both fail, write a failed final JSON payload and stop.
 
 ### Step 2 — Evaluate A-G
