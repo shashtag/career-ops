@@ -15,6 +15,14 @@ const FEED_URL = 'https://remotive.com/api/remote-jobs';
 export default {
   id: 'remotive',
 
+  detect(entry) {
+    if (entry?.provider === 'remotive') return { url: FEED_URL };
+    if (typeof entry?.careers_url === 'string' && /remotive\.com/i.test(entry.careers_url)) {
+      return { url: FEED_URL };
+    }
+    return null;
+  },
+
   /**
    * Fetches and normalizes postings from the Remotive public feed.
    * @param {{ name?: string }} entry - The job_boards entry being processed.

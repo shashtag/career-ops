@@ -7,6 +7,7 @@ are shared helpers and are not loaded as providers.
 | Board | Type (API / RSS / parser) | Notes |
 | --- | --- | --- |
 | 4 Day Week | API | Reads the public `https://4dayweek.io/api/jobs` JSON feed (4-day-week / reduced-hours roles). Configure with `provider: 4dayweek`; paginates `?page=N` up to `max_pages` (default 3), drops expired postings, then scanner filters apply. |
+| Adzuna | API | Queries the Adzuna Job Search REST API across supported country domains (e.g. `gb`, `us`, `in`, `de`, `fr`). Configure with `provider: adzuna`, `country`, `searchKeywords`, `searchLocation`, and credentials (`app_id` / `app_key` or `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` env vars). |
 | Amazon / AWS | API | Auto-detects `amazon.jobs` careers URLs and queries the public amazon.jobs search API. The board is one global endpoint, so narrow it with an `amazon:` config block (`loc_query`, `base_query`, `category`, …) whose keys pass through as query params. Configure with `provider: amazon`. |
 | Arbeitnow | API | Reads the public `https://www.arbeitnow.com/api/job-board-api` JSON feed (EU/DACH-heavy, newest-first). Configure with `provider: arbeitnow`; paginates `?page=N` up to `max_pages` (default 3), then scanner filters apply. |
 | Arbeitsagentur | API | Uses the public Bundesagentur fuer Arbeit Jobsuche REST API. Configure with `provider: arbeitsagentur`; title, location, and dedup filters run after fetch. |

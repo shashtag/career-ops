@@ -560,7 +560,7 @@ search_queries:
 #
 # Some providers are job boards / aggregators with no per-company careers
 # URL to detect, so they must be selected with an explicit `provider:`
-# field: 4dayweek, arbeitnow, arbeitsagentur, getonbrd, glints, himalayas, ibm, jobicy,
+# field: 4dayweek, adzuna, arbeitnow, arbeitsagentur, getonbrd, glints, himalayas, ibm, jobicy,
 # jobstreet, justjoin, landingjobs, nofluffjobs, remoteok, remotive, thehub,
 # weworkremotely, workingnomads. Examples for every built-in provider are below.
 
@@ -642,6 +642,18 @@ search_queries:
 #                                       # the board is 100k+ postings otherwise
 #     base_query: machine learning      # optional keyword filter
 #     # loc_query: Berlin               # optional free-text location (fuzzy, not a hard filter)
+#   enabled: true
+#
+# - name: Adzuna — UK Tech                # Adzuna job search API
+#   provider: adzuna
+#   country: gb            # 2-letter country code (gb, us, in, de, fr, au, ca, etc.)
+#   app_id: YOUR_APP_ID    # or set ADZUNA_APP_ID env var
+#   app_key: YOUR_APP_KEY  # or set ADZUNA_APP_KEY env var
+#   searchKeywords: "Software Engineer"
+#   searchLocation: "London"
+#   pageSize: 50           # 1-50 (default 50)
+#   maxPages: 3            # 1-20 (default 3)
+#   days: 30               # optional recency window
 #   enabled: true
 #
 # - name: 4 Day Week                      # 4-day-week / reduced-hours roles
@@ -1771,3 +1783,19 @@ job_boards:
   #   provider: higheredjobs
   #   cat_id: 68
   #   enabled: true
+
+  # ── Remotive (Remote Tech Feed) ─────────────────────────────────────
+  - name: Remotive
+    provider: remotive
+    enabled: false
+    notes: "Public remote-jobs API (https://remotive.com/api/remote-jobs). Zero auth."
+
+  # ── Adzuna (Job Search API) ─────────────────────────────────────────
+  - name: Adzuna — Tech Jobs
+    provider: adzuna
+    country: gb
+    searchKeywords: "Software Engineer"
+    pageSize: 50
+    maxPages: 3
+    enabled: false
+    notes: "Adzuna job search API across 16+ countries. Requires app_id & app_key or ADZUNA_APP_ID & ADZUNA_APP_KEY env vars."

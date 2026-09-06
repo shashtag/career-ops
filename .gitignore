@@ -107,3 +107,6 @@ scratch/*
 !scratch/fill-zapier-release-autonomous.mjs
 !scratch/generate-tailored-cv.mjs
 !scratch/check-env.js
+
+# Understand knowledge graph
+.ua/
