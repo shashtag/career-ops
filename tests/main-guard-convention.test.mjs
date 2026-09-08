@@ -204,7 +204,7 @@ const SKIP_DIRS = new Set([
   // User-layer / generated trees (gitignored, may hold arbitrary user files).
   // batch/ is deliberately NOT here: its tracked scripts (aggregate-tokens.mjs)
   // are entrypoints like any other and stay under enforcement.
-  'output', 'data', 'reports', 'jds', 'documents', 'interview-prep',
+  'output', 'data', 'reports', 'jds', 'documents', 'interview-prep', 'scratch',
 ]);
 
 function walk(dir, out = []) {
