@@ -7,13 +7,13 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
+import { join } from 'path';
+import * as yaml from 'js-yaml';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 import { updateApplicationStatus } from './scratch/apply_automator.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PENDING_FILE = join(__dirname, 'data', 'pending-review.yml');
+const DATA_ROOT = getCareerOpsRoot();
+const PENDING_FILE = join(DATA_ROOT, 'data', 'pending-review.yml');
 
 const colors = {
   reset: '\x1b[0m',

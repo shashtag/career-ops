@@ -2124,13 +2124,19 @@ export function loadRecentHistoryRoles(historyPath = SCAN_HISTORY_PATH, days = 6
   for (const line of lines.slice(hasHeader ? 1 : 0)) {
     const cols = line.split('\t');
     if (cols.length < 5) continue;
-    const [, firstSeen, , title, company] = cols;
+    const [, firstSeen, , title, company, , location] = cols;
     if (!firstSeen || !title || !company) continue;
     const ageDays = daysBetweenIsoDates(firstSeen, today);
     if (ageDays !== null && ageDays <= days) {
       recentRoles.push({
         company: company.trim(),
         title: title.trim(),
+        // Carried so the fuzzy-history check can honour
+        // `scan_history.dedup_include_location`. Dropping it here was enough to
+        // defeat the flag entirely: the company+role key correctly kept two
+        // cities apart, and then this check — which ran afterwards and compared
+        // company+title only — collapsed them again for 60 days.
+        location: (location ?? '').trim(),
         firstSeen,
       });
     }
@@ -3291,7 +3297,22 @@ async function main() {
         // Fuzzy duplicate/repost check against recent history (within 60 days)
         const isFuzzyHistoryMatch = recentHistoryRoles.some((r) => {
           if (canonicalizeCompany(r.company) !== canonicalizeCompany(job.company)) return false;
-          return job.title.toLowerCase() === r.title.toLowerCase() || roleFuzzyMatch(job.title, r.title);
+          if (!(job.title.toLowerCase() === r.title.toLowerCase() || roleFuzzyMatch(job.title, r.title))) return false;
+          // Same company, same role — but not necessarily the same opening. When
+          // the location joins the dedupe key, two postings naming DIFFERENT
+          // places are two requisitions hiring separate headcount, exactly as
+          // the keyed check above already treats them. Without this, that check
+          // is decorative: this one runs next and drops the second city anyway.
+          //
+          // Gated three ways so the default path is untouched: the flag must be
+          // on, and BOTH sides must name a place. A blank stays a wildcard that
+          // matches every city, which is what keeps an already-applied role from
+          // resurfacing once per city the moment the flag goes on.
+          if (!dedupIncludeLocation) return true;
+          const here = normalizeLocationForDedup(job.location);
+          const there = normalizeLocationForDedup(r.location);
+          if (!here || !there) return true;
+          return here === there;
         });
         if (isFuzzyHistoryMatch) {
           totalDupes++;

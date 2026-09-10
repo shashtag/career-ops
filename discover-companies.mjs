@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
+import { join } from 'path';
+import * as yaml from 'js-yaml';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORTALS_PATH = join(__dirname, 'portals.yml');
+const DATA_ROOT = getCareerOpsRoot();
+const PORTALS_PATH = join(DATA_ROOT, 'portals.yml');
 
 // Default seed list of high-value AI / developer tool startups
 const SEED_SLUGS = [

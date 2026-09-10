@@ -6,7 +6,7 @@ import { execSync, spawnSync } from 'child_process';
 import { chromium } from 'playwright';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import dotenv from 'dotenv';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import readline from 'readline';
 import { checkDuplicate } from './check-duplicate.mjs';
 import { getCompanyCaps } from '../lib/company-caps.mjs';

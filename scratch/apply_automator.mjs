@@ -27,7 +27,7 @@ import { fileURLToPath } from 'url';
 import readline from 'readline';
 import { exec } from 'child_process';
 import { chromium } from 'playwright';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { sanitizeAnswer } from '../lib/answer-sanitizer.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

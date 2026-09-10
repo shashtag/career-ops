@@ -10,12 +10,12 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { getOpenTabs } from './lib/cdp-page.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const APPS_FILE = join(__dirname, 'data', 'applications.md');
+const DATA_ROOT = getCareerOpsRoot();
+const APPS_FILE = join(DATA_ROOT, 'data', 'applications.md');
 
 const colors = {
   reset: '\x1b[0m',
