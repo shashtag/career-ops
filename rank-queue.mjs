@@ -36,6 +36,7 @@ import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { claimJob, sweepStaleClaims, parkedClaims, fetchOpenTabUrls } from './lib/job-claim.mjs';
+import { loadBlacklist } from './lib/blacklist.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname);
@@ -167,13 +168,10 @@ export function loadScoringContext(force = false) {
       .map(c => String(c?.name || '').toLowerCase().trim()).filter(Boolean));
   } catch { _pref.trackedCompanies = new Set(); }
 
-  // Do-not-apply companies. Opt-in file; absent means no blacklist.
-  try {
-    _pref.blacklist = readFileSync(BLACKLIST_PATH, 'utf-8')
-      .split('\n')
-      .map(l => l.replace(/^[-*|\s]+/, '').split('|')[0].trim().toLowerCase())
-      .filter(l => l && !l.startsWith('#') && l.length > 1);
-  } catch { _pref.blacklist = []; }
+  // Do-not-apply companies. Opt-in file; absent means no blacklist. Shared with
+  // the headless evaluator so the gate cannot exist in one path and not the
+  // other, which is exactly how scratch/evaluate-pipeline.mjs went without it.
+  _pref.blacklist = loadBlacklist(BLACKLIST_PATH);
 
   // first_seen per URL + volume-hiring counts + per-portal watch-start, all from scan-history.
   const firstSeen = new Map();

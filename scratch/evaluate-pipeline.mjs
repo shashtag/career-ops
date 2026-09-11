@@ -12,6 +12,7 @@ import { checkDuplicate } from './check-duplicate.mjs';
 import { getCompanyCaps, normalizeCompanyKey } from '../lib/company-caps.mjs';
 import { claimJob, sweepStaleClaims, holdForOpenTab, fetchOpenTabUrls } from '../lib/job-claim.mjs';
 import { stripToolGatedBlocks } from '../prompt-profile.mjs';
+import { loadBlacklist, blacklistMatch } from '../lib/blacklist.mjs';
 import { estimateTokens } from '../lib/context-budget.mjs';
 
 dotenv.config();
@@ -88,6 +89,9 @@ const sharedContext = existsSync(PATHS.shared) ? readFileSync(PATHS.shared, 'utf
 // then disabled. See prompt-profile.mjs for what is removed and, more
 // importantly, what is deliberately kept.
 const CAPABILITIES = { browser: false, webSearch: false, fileRead: false, fileWrite: false };
+// Opt-in, user layer: an absent data/blacklist.md means no gate.
+const BLACKLIST = loadBlacklist();
+if (BLACKLIST.length) console.log(`  ⛔ blacklist: ${BLACKLIST.length} do-not-apply company/companies loaded.`);
 const ofertaRaw = existsSync(PATHS.oferta) ? readFileSync(PATHS.oferta, 'utf-8').trim() : '';
 const ofertaTrim = stripToolGatedBlocks(ofertaRaw, { capabilities: CAPABILITIES });
 const ofertaLogic = ofertaTrim.text;
@@ -1302,6 +1306,24 @@ async function main() {
         continue;
       }
       claimedThisRun.push({ jobId: url, release: claim.release });
+
+      // Blacklist gate. modes/oferta.md specifies this gate, but it cannot run
+      // in this path from either side: the script never checked, and the model
+      // it calls has no file tools to read data/blacklist.md with. So a company
+      // the candidate recorded as do-not-apply got a full evaluation, a report
+      // and a tracker row. Unattended, there is nobody to ask for the override
+      // oferta.md offers, and the conservative answer is the candidate's own
+      // recorded decision: skip, write nothing, say so.
+      const blacklistHit = blacklistMatch(company, BLACKLIST);
+      if (blacklistHit) {
+        console.log(`  ⛔ [Blacklisted] ${company} | ${role} — "${blacklistHit}" is on data/blacklist.md. Not evaluated.`);
+        skippedCount++;
+        if (!classifyOnly) {
+          lines[lineIndex] = `- [x] ~~${url} | ${company} | ${role}~~ [Blacklisted]`;
+          writeFileSync(PATHS.pipeline, lines.join('\n'), 'utf-8');
+        }
+        continue;
+      }
 
       // Check if this job has already been marked as expired in cache (Suggestion 002)
       if (classificationCache[url]?.expired) {
