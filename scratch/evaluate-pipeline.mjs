@@ -11,6 +11,8 @@ import readline from 'readline';
 import { checkDuplicate } from './check-duplicate.mjs';
 import { getCompanyCaps } from '../lib/company-caps.mjs';
 import { claimJob, sweepStaleClaims, holdForOpenTab, fetchOpenTabUrls } from '../lib/job-claim.mjs';
+import { stripToolGatedBlocks } from '../prompt-profile.mjs';
+import { estimateTokens } from '../lib/context-budget.mjs';
 
 dotenv.config();
 
@@ -80,7 +82,25 @@ if (apiKey) {
 
 // Load context files for Gemini evaluation
 const sharedContext = existsSync(PATHS.shared) ? readFileSync(PATHS.shared, 'utf-8').trim() : '';
-const ofertaLogic = existsSync(PATHS.oferta) ? readFileSync(PATHS.oferta, 'utf-8').trim() : '';
+// oferta.md is written for the agent path, which has a browser, web search and
+// file tools. This caller has none of them and says so in its operating rules
+// below — so the blocks that depend on them are removed rather than shipped and
+// then disabled. See prompt-profile.mjs for what is removed and, more
+// importantly, what is deliberately kept.
+const CAPABILITIES = { browser: false, webSearch: false, fileRead: false, fileWrite: false };
+const ofertaRaw = existsSync(PATHS.oferta) ? readFileSync(PATHS.oferta, 'utf-8').trim() : '';
+const ofertaTrim = stripToolGatedBlocks(ofertaRaw, { capabilities: CAPABILITIES });
+const ofertaLogic = ofertaTrim.text;
+if (ofertaTrim.missing.length) {
+  // A marker that no longer matches means oferta.md moved underneath us. The
+  // prompt is merely bigger than it needs to be, never missing a rule — but say
+  // so, because the quiet version of this is a trim that silently stopped.
+  console.warn(`  ⚠️ prompt-profile: markers not found in oferta.md (${ofertaTrim.missing.join(', ')}) — those blocks were left in the prompt.`);
+}
+if (ofertaRaw && ofertaTrim.removed.length) {
+  const saved = estimateTokens(ofertaRaw) - estimateTokens(ofertaLogic);
+  console.log(`  📉 prompt-profile: dropped ${ofertaTrim.removed.length} tool-gated block(s) from oferta.md — ~${saved} tokens per evaluation.`);
+}
 const cvContent = existsSync(PATHS.cv) ? readFileSync(PATHS.cv, 'utf-8').trim() : '';
 const profileContent = existsSync(PATHS.profile) ? readFileSync(PATHS.profile, 'utf-8').trim() : '';
 const profileYml = existsSync(PATHS.profileYml) ? readFileSync(PATHS.profileYml, 'utf-8').trim() : '';
@@ -569,6 +589,11 @@ IMPORTANT OPERATING RULES FOR THIS CLI SESSION
 1. You do NOT have access to WebSearch, Playwright, or file writing tools.
    - For Block D (Comp research): provide salary estimates based on your training data, clearly noted as estimates.
    - For Block G (Legitimacy): analyze the JD text only; skip URL/page freshness checks.
+   - The jurisdiction-table signals (Agency Licensing, Immigration-Status Requirement
+     Overreach, Jurisdiction-Prohibited Content) have been removed from your
+     instructions because they require reading a local table you cannot open. Do not
+     report them as "clear", "not applicable", or anything else — omit them entirely.
+     An unchecked signal reported as clear is worse than a signal nobody mentioned.
    - Post-evaluation file saving is handled by the script, not by you.
 2. Generate Blocks A through G in full, in English, unless the JD is in another language.
 3. At the very end, output a machine-readable summary block in this exact format:
