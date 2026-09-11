@@ -37,6 +37,8 @@ These files contain your personal data, customizations, and work product. Update
 | `data/upskill/*` | Your skill-gap analysis reports (written by the `upskill` mode) |
 | `data/blacklist.md` | Your do-not-apply company list (opt-in — absence = no filtering; never auto-populated: only you, or the agent on your explicit instruction, write to it. Respected by `scan.mjs` and the `auto-pipeline`/`oferta`/`apply` gates; never a scoring input) |
 | `data/assessments.tsv` | Your append-only skills-assessment log: `{date}\t{company}\t{report#\|-}\t{platform}\t{subject}\t{threshold%\|-}\t{score%\|-}\t{stale_note}`. Appended by `node assessment-log.mjs add`; never edited in place. Empty stale_note = no staleness observed. Read by `assessment-log.mjs` |
+| `documents/*` | Your source documents for the `intake` mode — master CV, LinkedIn export, diplomas, reference letters (PII — gitignored except `.gitkeep` and `README.md`, which are system-owned). Read ONLY during `intake`, and only to propose source-annotated additions to `cv.md` / `config/profile.yml` / `modes/_profile.md`; never a direct source for generated content |
+| `data/intake-state.json` | Your `intake` bookkeeping — which documents have been scanned and which proposals you accepted, so a re-run does not re-propose what you already decided. Written by `intake.mjs` |
 | `writing-samples/*` | Your personal writing samples for style calibration (except `writing-samples/README.md`, which is system-owned documentation delivered by updates) |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |
