@@ -81,6 +81,53 @@ if (apiKey) {
   });
 }
 
+/**
+ * Close a Playwright page without ever throwing.
+ *
+ * When a scrape fails because the browser/context died, the cleanup close()
+ * throws a Protocol error ("Failed to find context with id ...") — and because
+ * two of the three close sites sit INSIDE the catch block, that throw escapes
+ * the try/catch entirely and kills the whole run. Observed 2026-09-11: a
+ * helsing.ai scrape lost its context at job 1380 of 1546 and the process exited
+ * 1, discarding the other 166.
+ */
+async function closeQuietly(page) {
+  try { await page.close(); } catch { /* context already gone */ }
+}
+
+/**
+ * A page from a browser that is actually alive, relaunching once if the handle
+ * is dead. Returns null when even a fresh launch fails, which the caller treats
+ * as "stop scraping", not "crash".
+ *
+ * newPage() on a dead browser throws OUTSIDE the per-job try/catch, so without
+ * this the run dies on the first job after the browser goes away — the same
+ * crash, one line earlier.
+ */
+async function newPageResilient(getBrowser, setBrowser) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let browser = getBrowser();
+    if (!browser) {
+      try {
+        console.log('🌐 Launching Playwright browser...');
+        browser = await chromium.launch({ headless: true });
+        setBrowser(browser);
+      } catch (err) {
+        console.warn(`  ⚠️ Could not launch Playwright: ${err.message.split('\n')[0]}`);
+        return null;
+      }
+    }
+    try {
+      return await browser.newPage();
+    } catch (err) {
+      console.warn(`  ⚠️ Browser handle is dead (${err.message.split('\n')[0]}) — relaunching.`);
+      try { await browser.close(); } catch { /* already gone */ }
+      setBrowser(null);
+    }
+  }
+  return null;
+}
+
 // Load context files for Gemini evaluation
 const sharedContext = existsSync(PATHS.shared) ? readFileSync(PATHS.shared, 'utf-8').trim() : '';
 // oferta.md is written for the agent path, which has a browser, web search and
@@ -1430,12 +1477,12 @@ async function main() {
 
       // 2. Fetch via Playwright if not cached
       if (!cacheData) {
-        if (!browser) {
-          console.log('🌐 Launching Playwright browser...');
-          browser = await chromium.launch({ headless: true });
-        }
         console.log(`🌐 [Scraping] [${i+1}/${pendingJobs.length}] ${company} | ${role}...`);
-        const page = await browser.newPage();
+        const page = await newPageResilient(() => browser, (b) => { browser = b; });
+        if (!page) {
+          console.warn('  ⚠️ No usable browser — stopping the scrape loop and finishing with what is already cached.');
+          break;
+        }
         try {
           const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
           if (response && (response.status() === 404 || response.status() === 410)) {
@@ -1453,7 +1500,7 @@ async function main() {
               logExpiredToScanHistory(url, company, role);
             }
             expiredCount++;
-            await page.close();
+            await closeQuietly(page);
             continue;
           }
           await page.waitForTimeout(2000); // hydration wait
@@ -1469,10 +1516,10 @@ async function main() {
           writeFileSync(cachePath, JSON.stringify(cacheData, null, 2), 'utf-8');
         } catch (err) {
           console.warn(`  ⚠️ Failed to scrape ${url}: ${err.message.split('\n')[0]}`);
-          await page.close();
+          await closeQuietly(page);
           continue; // skip to next
         }
-        await page.close();
+        await closeQuietly(page);
       }
 
       const bodyText = cacheData.bodyText || '';
@@ -1786,7 +1833,9 @@ ${evaluationText.replace(/---SCORE_SUMMARY---[\s\S]*?---END_SUMMARY---/, '').tri
       try { c.release(); } catch { /* already released */ }
     }
     if (browser) {
-      await browser.close();
+      // A dead browser throws here too, which would mask whatever real error
+      // sent us into finally in the first place.
+      try { await browser.close(); } catch { /* already gone */ }
     }
   }
 }

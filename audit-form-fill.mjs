@@ -128,7 +128,12 @@ async function main() {
   const rows = [];
   for (const f of best.fields) {
     const problems = auditAnswer(f.label, f.value, {
-      multiline: f.multiline,
+      // lib/collect-fields.mjs sets `multiline` from the tag name, but --stdin
+      // accepts whatever JSON it is handed. A payload without the key would
+      // leave `multiline` undefined, and the newline-in-single-line check only
+      // fires on an explicit false — so the gate would quietly drop a check on
+      // the last step before a submit. Fall back to the field's own type.
+      multiline: f.multiline ?? (String(f.type ?? '').toLowerCase() === 'textarea'),
       required: f.required,
       maxLength: f.maxLength,
     });
