@@ -135,21 +135,11 @@ node audit-form-fill.mjs --stdin --summary    # gate, must exit 0
 
 Add `--cdp` instead of `--stdin` on either CLI when :9222 happens to be up.
 
-Resolver statuses: `OK` fill as-is · `TEXT` honour the `adapt` rule · `WRITE` generate it ·
-`FILE` attach the tailored PDF · `YOU` a legal agreement or consent — **never auto-answer,
-surface it** · `ASK` decide it yourself, **then add it to `config/application-answers.yml`**.
-
-A row tagged `[combobox: open + click, do NOT type]` only looks like a text box. Open it,
-wait for the listbox, click the option — real Greenhouse and Ashby forms have zero native
-`<select>`, and typing leaves the value unset so the submit bounces.
-
-Exit 1 = a required field has no answer; resolve before filling. **Exit 2 = the collector
-returned nothing** — the form had not rendered (ATS SPAs need a few seconds), wrong frame, or
-the page is already a confirmation. Re-collect; an empty form is never "clean".
-
-**Never write a per-form fill script.** `scratch/fill-*.mjs`, `cdp-*.mjs`, `fix-*.mjs` are
-banned and `apply_automator.mjs` is retired. That pattern produced 340 throwaways and every
-accidental-submit incident on record.
+The six resolver statuses, the `[combobox: open + click]` rule, what exit 1 and exit 2 mean,
+and why per-form fill scripts are banned are all in `modes/_custom.md` → **Applying**, which
+this run loads anyway. Read them there rather than from a second copy here — two copies of a
+safety rule is how they drift, and the copy in `_custom.md` is the one the scan/apply/
+pipeline/batch subagents also get.
 
 ---
 
@@ -166,19 +156,11 @@ accidental-submit incident on record.
 A filled form left open beats a half-filled form that was submitted, and both beat a closed
 tab. Never close a tab holding a form you filled.
 
-Nobody proofreads after you:
-
-- Fill every required field. The resolver returns `unresolved` rather than guessing when its
-  answer matches none of a dropdown's real options — that is your decision, not a blank.
-- Answers from a report's Section H are written as `> blockquotes`; run them through
-  `sanitizeAnswer()` in `lib/answer-sanitizer.mjs` rather than pasting the markdown.
-- Name, email, phone, current/expected CTC, notice period and location come from
-  `config/application-answers.yml`, which interpolates `config/profile.yml`. Trust the
-  resolver over your own recall; if it is wrong, fix the store, not the field.
-- Work authorization and visa sponsorship are resolved with country-qualified matching and
-  covered by `tests/answer-resolver.test.mjs`. Do not hand-correct them from memory.
-- Every claim traceable to `cv.md` / `article-digest.md` / `_profile.md`. Reframe freely,
-  invent nothing.
+Nobody proofreads after you. The fill-quality rules — unresolved dropdowns are a decision
+not a blank, Section H answers go through `sanitizeAnswer()`, identity and comp fields come
+from the answer store rather than your recall, work authorization is country-qualified, every
+claim traceable to `cv.md` — are in `modes/_custom.md` → **Applying**. They are not repeated
+here.
 
 The audit gate is mandatory and read-only. Exit 1 = errors: fix each flagged field in place,
 re-collect, re-run until it exits 0. Then submit.
@@ -188,25 +170,21 @@ re-collect, re-run until it exits 0. Then submit.
 CAPTCHA, an ATS login wall, a broken form, a payment/verification step — these are the cases
 where a human has to finish. When you hit one:
 
-1. **Leave the tab open. Never close it, never navigate it away, never reload it.** The
-   filled form only exists in that tab; closing it throws away the entire run's work.
-2. **Park the claim so the next run doesn't refill it in a second tab:**
+1. **Leave the tab open, filled, and park the claim** — the exact commands and why the tab
+   must never be closed are in `modes/_custom.md` → **Applying**:
 
    ```bash
    node lib/job-claim.mjs park <report#> --url "<form url>" --note "filled; needs <what>"
    ```
 
-   The claim is then held for exactly as long as the tab exists. A later run sees it under
-   `node lib/job-claim.mjs parked` and knows to **verify + submit only** — never refill.
-3. Log it in `data/run-log.tsv` as `blocked` with the specific remaining step
+2. Log it in `data/run-log.tsv` as `blocked` with the specific remaining step
    (`captcha`, `login-wall`, `upload-failed`), not a vague "couldn't submit".
-4. Do **not** write `Applied`. Leave the tracker row as-is, or note it unverified.
+3. Do **not** write `Applied`. Leave the tracker row as-is, or note it unverified.
 
 Then exit. Do not start another job.
 
-**Confirm inside the form's own frame.** `page.url()` is worthless here: ATS forms are
-cross-origin iframes and the parent URL never changes. Read *that frame's* `innerText` for
-"thank you" / "application submitted" / "thanks for completing".
+**Confirm inside the form's own frame** (`modes/_custom.md` explains why `page.url()` is
+worthless for a cross-origin ATS iframe).
 Confirmed → `node set-status.mjs <num> Applied --note "..."`.
 Not confirmed → record it as **unverified**; do not write `Applied`.
 
@@ -239,19 +217,9 @@ Append one line to `data/run-log.tsv`:
 <ISO ts>	<num>	<company>	<role>	<score>/5	<submitted|blocked|skipped>	<reason if not submitted>
 ```
 
-**Then feed the store — one command:**
-
-```bash
-node answer-resolver.mjs --stdin --learn < fields.json
-```
-
-Prints paste-ready entries for every `ASK`, match terms already chosen. Fill each
-`REPLACE_ME` with the answer you just used, append to `config/application-answers.yml`, run
-`node tests/answer-resolver.test.mjs`. Seconds of work, and that question is never a decision
-again. Consent gates are never learned — they stay the user's call.
-
-This is the only step that makes the next run cheaper; skipping it is how 340 scripts
-happened.
+**Then feed the store** — `node answer-resolver.mjs --stdin --learn < fields.json`, per
+`modes/_custom.md` → **Applying** step 6. This is the only step that makes the next run
+cheaper, so it is not optional.
 
 ---
 
