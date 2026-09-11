@@ -34,6 +34,10 @@ for (const relativePath of [
   // path-resolver.mjs (CAREER_OPS_ROOT), so the fixture carries that too.
   'path-resolver.mjs',
   'lib/context-budget.mjs',
+  // ollama-eval.mjs imports lib/sanitize-jd.mjs; a fixture missing it crashes
+  // the CLI with MODULE_NOT_FOUND, which surfaced only as a truncated stderr
+  // tail ("Node.js v22.21.1") rather than as a missing-file message.
+  'lib/sanitize-jd.mjs',
   // reserve-report-num.mjs's main-guard comes from lib/is-main-module.mjs
   // (#3170), so a fixture that carries it has to carry the helper too.
   'lib/is-main-module.mjs',
