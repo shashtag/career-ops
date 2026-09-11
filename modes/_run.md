@@ -102,12 +102,13 @@ jobs. Two kinds, both self-healing so a crash never wedges a job:
   30 min after it stops being visible. If Chrome is unreachable the claim is *never* freed,
   since an unobservable tab isn't a closed one.
 
-**Company cap — recount by hand.** `grep -i "<company root name>" data/applications.md`, count
-`Applied`/`Responded`/`Interview`/`Offer`/`Rejected` rows in the last 30 days across **all
-name variants** ("Sarvam" and "Sarvam AI" are one company). **Cap is 2 per 30 days**
-(`modes/_profile.md` is the authority — not 3, and not whatever `check-company-cap.mjs`
-prints; it undercounts by dropping `Rejected` and matching names exactly). At or over cap →
-different company. Never `--force`.
+**Company cap — one command.** `node check-company-cap.mjs "<company>"` (exit 3 = at or over
+cap). It counts `Applied`/`Responded`/`Interview`/`Offer`/`Rejected` in the last 30 days
+across **all name variants** ("Sarvam" and "Sarvam AI" are one company), and prints the rows
+behind the count. **Cap is 2 per 30 days** (`modes/_profile.md` is the authority — not 3).
+At or over cap → different company. Never `--force`. Do not grep the tracker for this: the
+hand-recount this line used to require was there because the script split name variants, and
+that is fixed (`lib/company-caps.mjs`, 2026-09-11).
 
 **An open tab does not mean the job is unsubmitted.** Tabs sit on `/confirmation` long after
 submitting. Decide from the tracker row plus the actual page text, never from a tab existing.
@@ -267,4 +268,4 @@ no suggestion file.
 ## Style
 
 Form answers: short, concrete, specific. No AI slop, no filler. Minimum tokens everywhere —
-but never skip the submit gate or the cap recount to save them.
+but never skip the submit gate or the cap check to save them.

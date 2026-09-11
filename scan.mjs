@@ -75,7 +75,7 @@ import { localToday } from './lib/local-today.mjs';
 import { printScanSummaryHeader } from './lib/scan-summary-marker.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { promoteKnownFragmentIdentity } from './url-key.mjs';
-import { getCompanyCaps } from './lib/company-caps.mjs';
+import { getCompanyCaps, normalizeCompanyKey } from './lib/company-caps.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 
 try {
@@ -3397,10 +3397,10 @@ async function main() {
   const cappedOffers = [];
 
   for (const o of verifiedOffers) {
-    const normCompany = o.company.toLowerCase().trim();
-    const capKey = normCompany.replace(/[^a-z0-9]/g, '');
-    const matchKey = Object.keys(caps).find((k) => k.toLowerCase().replace(/[^a-z0-9]/g, '') === capKey);
-    const capInfo = matchKey ? caps[matchKey] : null;
+    // Keys ARE the normalized form now, so this is a lookup rather than a scan
+    // over every key — and it matches name variants ("Sarvam" / "Sarvam AI")
+    // the way the cap policy means them to (see lib/company-caps.mjs).
+    const capInfo = caps[normalizeCompanyKey(o.company)] ?? null;
 
     if (capInfo && capInfo.count >= 2) {
       cappedOffers.push(o);

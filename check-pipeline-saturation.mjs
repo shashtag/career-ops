@@ -2,7 +2,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { getCompanyCaps } from './lib/company-caps.mjs';
+import { getCompanyCaps, normalizeCompanyKey } from './lib/company-caps.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,9 +52,11 @@ function main() {
   const capBreakdown = {};
 
   for (const company of pendingCompanies) {
-    const compLower = company.toLowerCase();
-    const count = caps[compLower]?.count || 0;
-    capBreakdown[compLower] = count;
+    // Normalized key, not the raw lowercase name: caps are grouped by company,
+    // not by spelling (lib/company-caps.mjs).
+    const compKey = normalizeCompanyKey(company);
+    const count = caps[compKey]?.count || 0;
+    capBreakdown[company.toLowerCase()] = count;
 
     if (count >= 2) {
       cappedCompanies.push(company);

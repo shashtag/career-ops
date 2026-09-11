@@ -9,7 +9,7 @@ import dotenv from 'dotenv';
 import * as yaml from 'js-yaml';
 import readline from 'readline';
 import { checkDuplicate } from './check-duplicate.mjs';
-import { getCompanyCaps } from '../lib/company-caps.mjs';
+import { getCompanyCaps, normalizeCompanyKey } from '../lib/company-caps.mjs';
 import { claimJob, sweepStaleClaims, holdForOpenTab, fetchOpenTabUrls } from '../lib/job-claim.mjs';
 import { stripToolGatedBlocks } from '../prompt-profile.mjs';
 import { estimateTokens } from '../lib/context-budget.mjs';
@@ -207,10 +207,9 @@ function getOverAppliedCompanies(applicationsPath, limit = 2, days = 30) {
   const overApplied = new Set();
   try {
     const caps = getCompanyCaps(limit, days);
-    for (const [companyLower, info] of Object.entries(caps)) {
-      if (info.count >= limit) {
-        overApplied.add(companyLower.toLowerCase().replace(/[^a-z0-9]/g, ''));
-      }
+    for (const [companyKey, info] of Object.entries(caps)) {
+      // Keys are already the normalized company form (lib/company-caps.mjs).
+      if (info.count >= limit) overApplied.add(companyKey);
     }
   } catch (err) {
     console.warn(`⚠️ Warning: Failed to retrieve company caps cache: ${err.message}`);
@@ -354,7 +353,7 @@ function classifyJob(company, role, url, bodyText, locationType, overAppliedComp
     baseClassification.priority = 3;
   }
 
-  const normCompany = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normCompany = normalizeCompanyKey(company);
   if (overAppliedCompanies && overAppliedCompanies.has(normCompany)) {
     baseClassification.priority = 3;
     baseClassification.overApplied = true;
@@ -1356,7 +1355,7 @@ async function main() {
       }
 
       // Check company application cap (Suggestion 007)
-      const normCompany = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normCompany = normalizeCompanyKey(company);
       if (overAppliedCompanies.has(normCompany)) {
         console.log(`  🚫 [Cap Pre-check] Skipping ${company} | ${role} (Application cap reached: >= 2 in 30d)`);
         skippedCount++;
@@ -1484,7 +1483,7 @@ async function main() {
       let classification;
       if (classificationCache[url] && classificationCache[url].priority && classificationCache[url].country) {
         classification = { country: classificationCache[url].country, priority: classificationCache[url].priority };
-        const normCompany = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normCompany = normalizeCompanyKey(company);
         if (overAppliedCompanies && overAppliedCompanies.has(normCompany)) {
           classification.priority = 3;
           classification.overApplied = true;
