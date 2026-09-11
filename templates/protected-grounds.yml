@@ -3,7 +3,8 @@
 # Consumed prompt-level by modes/interview-redflag.md (Step 2c — protected-
 # grounds question detection). This file is a DATA REFERENCE, not instruction
 # logic: extending it to a new jurisdiction never requires touching the rule
-# text in modes/interview-redflag.md. No script reads it — the agent does, as
+# text in modes/interview-redflag.md. jurisdiction-lookup.mjs reads it to
+# perform the jurisdiction key match; every judgement stays with the agent, as
 # a LOCAL file lookup over local session transcripts. Nothing leaves the
 # machine.
 #

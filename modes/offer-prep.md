@@ -201,10 +201,14 @@ context** to the clause walk without changing the mode's posture: it states
 facts about statutes, and it never judges the candidate's clause.
 
 **Lookup:** when the Step 2 walk reaches a restrictive-covenant clause
-(taxonomy category 4), check `templates/restrictive-covenants.yml` for a row
-matching (a) the jurisdiction derived in Step 1 (candidate's location from
+(taxonomy category 4), run `node jurisdiction-lookup.mjs --table
+restrictive-covenants --json` for the rows in `templates/restrictive-covenants.yml`
+matching the jurisdiction derived in Step 1 (candidate's location from
 `config/profile.yml`; a named work location in the contract wins if it
-contradicts) and (b) the clause's **covenant type**. The table is a data
+contradicts — pass it as `--candidate <key>` when it does). Verdict `none` →
+no row for this jurisdiction. Verdict `UNCERTAIN`, or exit 2 → read the table
+yourself. Then narrow the returned rows to the clause's **covenant type**; the
+lookup matches jurisdiction only. The table is a data
 reference, not instruction logic — adding a jurisdiction or covenant-type row
 there never requires touching this rule text; every row carries a legal
 basis, an effective date, statutory exceptions, sources, and an `as_of`

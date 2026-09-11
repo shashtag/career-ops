@@ -3,7 +3,8 @@
 # Consumed prompt-level by modes/oferta.md Block G ("AI-Screening Disclosure"
 # signal). This file is a DATA REFERENCE, not instruction logic: extending it
 # to a new jurisdiction never requires touching the rule text in
-# modes/oferta.md. No script reads it — the agent does. Nothing in this
+# modes/oferta.md. jurisdiction-lookup.mjs reads it to perform the
+# jurisdiction key match; every judgement stays with the agent. Nothing in this
 # system ever fetches or scrapes an official page: the candidate clicks the
 # official link themselves (zero-fetch by design, same as agency-licensing.yml).
 #

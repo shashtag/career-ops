@@ -78,8 +78,8 @@ Read the entire page/form to scan for knock-out questions BEFORE generating full
 
 Application forms are where status screening most often hides — usually one dropdown away from the lawful sponsorship question. While scanning the form (this can run in the same pass as Step 5b):
 
-1. Read `templates/immigration-status-requirements.yml` — a jurisdiction-keyed table of prohibited status-requirement patterns, each entry carrying a mandatory `lawful_screening_contrast`, `legal_basis`, `exceptions`, `sources`, and `as_of` date.
-2. Derive the candidate's jurisdiction key from `config/profile.yml` → `location` (e.g. Ontario, Canada → `CA-ON`; anywhere in the United States → `US` for the federal row). No entry for the candidate's jurisdiction → skip this step silently.
+1. Ask `node jurisdiction-lookup.mjs --table immigration-status --json` for the rows keyed to the candidate's jurisdiction, rather than reading `templates/immigration-status-requirements.yml` in full. The table is jurisdiction-keyed, each entry carrying a mandatory `lawful_screening_contrast`, `legal_basis`, `exceptions`, `sources`, and `as_of` date.
+2. Verdict `none` → skip this step silently. Verdict `UNCERTAIN`, or exit 2 → read the table yourself and derive the key by hand (e.g. Ontario, Canada → `CA-ON`; anywhere in the United States → `US` for the federal row). The lookup performs the key match only; whether a question screens for status is still your judgement.
 3. For each form question, judge whether it screens for a specific immigration STATUS rather than work AUTHORIZATION, per the entry's `prohibited_requirement_patterns` guidance. Agent-judged, never naive keyword matching.
 
 **The authorization-vs-status line (mandatory):** plain authorization and sponsorship questions are lawful screening and generate NO warning from this step — ever. "Are you authorized to work in the United States?", "Will you now or in the future require sponsorship for employment visa status?", and "Are you legally authorized to work in Canada?" are exactly the questions regulators approve (Step 5b already handles them as knock-out areas against the candidate's profile). This step fires only on status demands: "Are you a US citizen?", "Are you a citizen or permanent resident?", and the *Haseeb* proxy pattern — e.g. a fictional Acme Corp form asking "Are you legally authorized to work in Canada **on a permanent basis**?" The permanence qualifier is what converts a lawful authorization question into a status screen (*Haseeb v. Imperial Oil*, HRTO); without it, the same question is lawful and passes silently.
@@ -98,8 +98,8 @@ If a question matches, warn the candidate BEFORE generating or filling an answer
 
 Application forms are where legally prohibited questions most often live — salary-history questions in particular appear in forms far more often than in JD text. While scanning the form (this can run in the same pass as Step 5b):
 
-1. Read `templates/jurisdiction-prohibited-content.yml` — a jurisdiction-keyed table of content employers are prohibited from asking for, each entry carrying a legal basis, effective date, and sources.
-2. Derive the candidate's jurisdiction key from `config/profile.yml` → `location` (e.g. Ontario, Canada → `CA-ON`; California, USA → `US-CA`). No entry for the candidate's jurisdiction → skip this step silently.
+1. Ask `node jurisdiction-lookup.mjs --table prohibited-content --json` for the rows keyed to the candidate's jurisdiction, rather than reading `templates/jurisdiction-prohibited-content.yml` in full. The table is jurisdiction-keyed, each entry carrying a legal basis, effective date, and sources.
+2. Verdict `none` → skip this step silently. Verdict `UNCERTAIN`, or exit 2 → read the table yourself and derive the key by hand (e.g. Ontario, Canada → `CA-ON`; California, USA → `US-CA`).
 3. For each form field, judge whether it asks for content matching an entry per that entry's `matching` guidance. Agent-judged, never naive keyword matching: a salary-*expectations* field (handled by Step 5b as a knock-out area) is not a salary-*history* field, and fraud-warning boilerplate ("we will never ask for...") must not fire.
 
 If a field matches, warn the candidate BEFORE generating or filling an answer for that field:

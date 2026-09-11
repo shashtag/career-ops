@@ -3,8 +3,9 @@
 # Consumed prompt-level by modes/offer-prep.md ("Statutory-context notes for
 # restrictive covenants"). This file is a DATA REFERENCE, not instruction
 # logic: extending it to a new jurisdiction or covenant type never requires
-# touching the rule text in modes/offer-prep.md. No script reads it — the
-# agent does, as a LOCAL file lookup (which is not online research and does
+# touching the rule text in modes/offer-prep.md. jurisdiction-lookup.mjs reads
+# it to perform the jurisdiction key match; every judgement stays with the
+# agent. Both are LOCAL file lookups (which is not online research and does
 # not touch offer-prep's no-research guard).
 #
 # CONTRIBUTION RULE (mandatory): no entry lands in this table without
