@@ -1198,3 +1198,37 @@ Runs:       — no data (data/scan-runs.tsv missing; created by the next scan)
 * `filtered_blacklist` — skipped because the company is on your `data/blacklist.md` do-not-apply list (#1742)
 
 As the project is in continuous development, to parse for a stat we recommend doing it by column header instead of position.
+
+---
+
+## token-audit
+
+Reads Claude Code transcripts for this project and reports where the tokens actually went. career-ops is prompt-heavy by design, which makes it easy to optimise the wrong thing: ranked by file size, `modes/` and `reports/` look like the cost; ranked by billed tokens they are a rounding error. Nothing else in the repo could tell the difference.
+
+Two facts it exists to surface:
+
+1. **Cost is `context_size x api_calls`, not `content_written`.** Everything in context is re-sent on every later call in the session, so a token added early is billed once per remaining call.
+2. **The base context is paid on every call.** System prompt, tool definitions, the skill listing, `AGENTS.md`, memory — trimming that is the only lever that scales with session length instead of fighting it.
+
+It reports billed input split into `base x calls` vs conversation growth, per-tool result cost worst-first, and two findings that enforce `modes/apply.md` → "Reading the page without burning context" by measurement rather than by reminder:
+
+| Finding | Fires when |
+|---------|-----------|
+| `unscaled-screenshots` | image-returning `computer` calls (`screenshot`/`scroll`) sent without `scale`. `scale: 0.5` is a quarter of the tokens; `read_page` answers most apply-run questions for ~371 |
+| `image-read-from-disk` | `Read` on a saved `.png` — ~80k tokens a time, four times a live screenshot, because it arrives at full resolution |
+
+```bash
+node token-audit.mjs                  # JSON to stdout
+node token-audit.mjs --summary        # human-readable tables
+node token-audit.mjs --since 30       # only sessions touched in the last 30 days
+node token-audit.mjs --top 15         # rows per table in --summary
+node token-audit.mjs --strict         # exit 1 when a high-severity finding fires
+node token-audit.mjs --dir <path>     # transcript directory override (tests)
+node token-audit.mjs --self-test
+```
+
+**Read-only and advisory.** It never touches the tracker, reports, or any user-layer file.
+
+**Exit codes:** `0` always, including when findings fire; `1` only under `--strict` with a high-severity finding.
+
+Transcripts are a Claude Code artifact and career-ops is CLI-agnostic, so on Codex/Gemini/OpenCode there is nothing to read: the script says so and exits `0`. Absence of transcripts is not a failure.
