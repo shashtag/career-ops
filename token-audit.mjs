@@ -380,7 +380,7 @@ function selfTest() {
   check('approxTokens rounds chars/4', approxTokens(400) === 100 && approxTokens(0) === 0);
   check(
     'transcriptDirFor collapses non-alphanumerics',
-    transcriptDirFor('/Users/x/Desktop/career-ops').endsWith('-Users-x-Desktop-career-ops'),
+    transcriptDirFor('/home/x/Desktop/career-ops').endsWith('-home-x-Desktop-career-ops'),
   );
 
   // A transcript where the tool_result precedes its tool_use in file order —
