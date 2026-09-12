@@ -328,6 +328,7 @@ const SYSTEM_PATHS = [
   'contacts.mjs',
   'linkedin-join.mjs',
   'weekly-digest.mjs',
+  'token-audit.mjs',
   'tracker-sync-check.mjs',
   'followup-cadence.mjs',
   'invite-match.mjs',
