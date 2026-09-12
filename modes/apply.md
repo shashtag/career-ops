@@ -257,6 +257,44 @@ If the form has more questions than the visible ones:
 - Or paste the remaining questions
 - Process in iterations until the entire form is covered
 
+## Reading the page without burning context
+
+An apply run is a long session, and **every token that enters context is re-sent on every
+later API call in that run**. Observation cost is therefore multiplied by however many steps
+remain — which is why *how* the page is read dominates the cost of an application, not the
+report, the CV, or these instructions.
+
+Measured over 696 local sessions, per call:
+
+| How the page was read | avg tokens |
+|---|---|
+| `computer{action:"scroll"}` (returns a full screenshot) | 23,913 |
+| `computer{action:"screenshot"}` | 18,948 |
+| `Read` on a saved `.png` | 80,168 |
+| `read_page` (accessibility tree) | 371 |
+| `left_click` / `type` / `key` | ~120 |
+
+**The rules that follow from that:**
+
+1. **Default to text, not pixels.** `answer-resolver.mjs --collector` (the fill loop's step 1)
+   and `read_page` / `find` answer nearly every question an apply run actually asks: what
+   fields exist, what they are labelled, what is required, what is still empty, whether a
+   submit succeeded. A screenshot is for when you need *layout or rendering* — an overlay you
+   suspect is intercepting clicks, a canvas widget, a visual state the tree cannot express.
+2. **When you do need an image, pass `scale`.** `scale: 0.5` is a quarter of the tokens and is
+   enough to see layout. Full resolution is for reading small text off a rendered element,
+   and `zoom` on a region beats a full-resolution page capture for that.
+3. **Never `Read` a screenshot back from disk.** A saved PNG re-read through the `Read` tool
+   costs ~80k tokens — four times a live screenshot, because it arrives at full resolution.
+   If you need to look at the page, look at the *page*. Saving a screenshot for the user's
+   benefit is fine; reading it back into your own context is not.
+4. **Re-read narrowly after a mutation.** After selecting a combobox option or a step
+   transition, re-read the specific control with `find`, or re-run the collector — not the
+   whole viewport.
+
+None of this trades away correctness: the staleness problems in the quirks below are caused by
+cached element *references*, and re-reading the tree fixes them exactly as a screenshot would.
+
 ## Known ATS Quirks
 
 Field-tested across ~12 Playwright-driven applications (Ashby, Greenhouse, Lever, Workable). These quirks silently break an apply run if not accounted for.
@@ -282,7 +320,7 @@ Field-tested across ~12 Playwright-driven applications (Ashby, Greenhouse, Lever
 ### React-select autocomplete widgets
 
 - **Symptom:** `react-select` (common in Greenhouse, Ashby, Lever for location/department fields) destroys and recreates its internal DOM on every keystroke. Cached refs go stale instantly.
-- **Agent:** Type character-by-character with short delays (~100 ms). Re-snapshot after every selection to pick up the new DOM state. Never cache element references across interactions.
+- **Agent:** Type character-by-character with short delays (~100 ms). Re-read after every selection to pick up the new DOM state — with `find` on the control you just touched, or the collector, **not** a screenshot (see "Reading the page without burning context": the fix here is discarding stale refs, which a text re-read does just as well for ~2% of the tokens). Never cache element references across interactions.
 - **Candidate:** Verifies each selected value is correct before moving on; corrects any mis-selection inline.
 
 ### Huge native `<select>` elements (1 000+ options)
