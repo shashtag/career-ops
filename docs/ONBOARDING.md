@@ -52,6 +52,7 @@ Copy `templates/portals.example.yml` → `portals.yml`; if they gave target role
 #### Step 4: Tracker
 If `data/applications.md` doesn't exist, create it:
 ```markdown
+
 # Applications Tracker
 
 | # | Date | Company | Role | Score | Status | PDF | Report | Notes |

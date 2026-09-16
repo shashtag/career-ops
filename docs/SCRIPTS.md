@@ -1229,6 +1229,9 @@ node token-audit.mjs --self-test
 
 **Read-only and advisory.** It never touches the tracker, reports, or any user-layer file.
 
+[docs/TOKEN-BUDGET.md](TOKEN-BUDGET.md) explains what the numbers mean and what to do
+about them — including the base-context levers this script measures but cannot change.
+
 **Exit codes:** `0` always, including when findings fire; `1` only under `--strict` with a high-severity finding.
 
 Transcripts are a Claude Code artifact and career-ops is CLI-agnostic, so on Codex/Gemini/OpenCode there is nothing to read: the script says so and exits `0`. Absence of transcripts is not a failure.
