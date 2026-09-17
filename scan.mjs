@@ -2829,7 +2829,7 @@ const USAGE = `Usage:
   node scan.mjs --posted-after 2026-07-01    # absolute lower bound on posting date
   node scan.mjs --posted-before 2026-08-01   # absolute upper bound on posting date
   node scan.mjs --json                       # emit one machine-readable receipt on stdout
-  node scan.mjs --timeout 45000              # hard execution cap in ms (default 45000)
+  node scan.mjs --timeout 300000             # hard execution cap in ms (default 300000)
   node scan.mjs --quiet                      # suppress the manifesto footer
   node scan.mjs --help                       # print this usage block and exit`;
 
@@ -2838,23 +2838,25 @@ async function main() {
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS });
 
   // --timeout or --timeout=<ms>: hard execution cap to prevent hanging in scheduled context.
+  // Default is 300000ms (5 min) — enough for 154 companies across 3 providers.
+  const DEFAULT_TIMEOUT_MS = 300000;
   const timeoutArg = args.find((a) => a === '--timeout' || a.startsWith('--timeout='));
+  let timeoutMs = DEFAULT_TIMEOUT_MS;
   if (timeoutArg) {
-    let timeoutMs = 45000;
     if (timeoutArg.includes('=')) {
-      timeoutMs = Number(timeoutArg.split('=')[1]) || 45000;
+      timeoutMs = Number(timeoutArg.split('=')[1]) || DEFAULT_TIMEOUT_MS;
     } else {
       const idx = args.indexOf('--timeout');
       if (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('-')) {
-        timeoutMs = Number(args[idx + 1]) || 45000;
+        timeoutMs = Number(args[idx + 1]) || DEFAULT_TIMEOUT_MS;
       }
     }
-    if (timeoutMs > 0) {
-      setTimeout(() => {
-        console.warn(`\n⚠️ scan.mjs execution timed out after ${timeoutMs}ms. Exiting gracefully.`);
-        process.exit(0);
-      }, timeoutMs).unref();
-    }
+  }
+  if (timeoutMs > 0) {
+    setTimeout(() => {
+      console.warn(`\n⚠️ scan.mjs execution timed out after ${timeoutMs}ms. Exiting gracefully.`);
+      process.exit(0);
+    }, timeoutMs).unref();
   }
 
   const dryRun = args.includes('--dry-run');
