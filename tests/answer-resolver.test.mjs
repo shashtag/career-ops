@@ -118,6 +118,30 @@ if (store) {
   if (impossible.status === 'unresolved') pass('an answer that fits no option degrades to unresolved instead of guessing');
   else fail('resolver guessed an option it should have refused');
 
+  // --- truncated option lists ---------------------------------------------
+  // The collector caps option lists so a 250-country dropdown cannot flood
+  // context. That cap is lossy: the option the answer wants may be the one cut.
+  // Measured before the guard: matchOption('United States', [...cut before it])
+  // returned 'United Arab Emirates' via token overlap — status `resolved`,
+  // confidence `medium`, wrong country, no signal.
+  const truncExact = resolveField(
+    { label: 'Are you legally authorized to work in India?', type: 'select', options: ['Yes', 'No'], optionsTruncated: true, required: true }, store);
+  if (truncExact.status === 'resolved' && truncExact.option === 'Yes') {
+    pass('an exact hit inside a truncated list still resolves — that option demonstrably exists');
+  } else fail(`exact match on a truncated list must survive: ${JSON.stringify(truncExact)}`);
+
+  const truncFuzzy = resolveField(
+    { label: 'Are you legally authorized to work in India?', type: 'select', options: ['Yes, with conditions'], optionsTruncated: true, required: true }, store);
+  if (truncFuzzy.status === 'unresolved' && truncFuzzy.optionMatch === 'truncated-list' && truncFuzzy.option === null) {
+    pass('a fuzzy hit inside a truncated list refuses instead of committing a partial-list guess');
+  } else fail(`fuzzy match on a truncated list must refuse: ${JSON.stringify(truncFuzzy)}`);
+
+  const untruncFuzzy = resolveField(
+    { label: 'Are you legally authorized to work in India?', type: 'select', options: ['Yes, with conditions'], required: true }, store);
+  if (untruncFuzzy.status === 'resolved') {
+    pass('the same fuzzy hit on a complete list is still accepted — the guard is scoped to truncation');
+  } else fail(`guard leaked onto untruncated lists: ${JSON.stringify(untruncFuzzy)}`);
+
   const junk = f('What is your favourite Pokemon?');
   if (junk.status === 'unresolved') pass('unknown labels come back unresolved, not fabricated');
   else fail(`unknown label resolved to ${junk.id}`);
@@ -204,6 +228,56 @@ if (store) {
   const c = summarize([{ field: { required: true }, resolution: { status: 'consent' } }]);
   if (c.requiredBlockers === 1) pass('a required consent gate counts as a blocker');
   else fail('required consent must block the run');
+}
+
+// --- COLLECT_EXPRESSION: the cap is lossy, so it must announce itself ---------
+// The collector runs in the page, so it is exercised here against a minimal DOM
+// stub rather than a browser. The cap itself is not the risk — a silent cap is:
+// downstream, resolveField cannot tell a complete list from a cut one.
+{
+  const cf = await import(pathToFileURL(join(ROOT, 'lib', 'collect-fields.mjs')).href);
+
+  const mkOption = (text) => ({ text });
+  const mkEl = (props) => ({
+    getAttribute: () => null,
+    closest: () => null,
+    parentElement: null,
+    name: '', id: '', placeholder: '', value: '', required: false, maxLength: -1,
+    ...props,
+  });
+
+  const bigSelect = mkEl({
+    tagName: 'SELECT', type: '', name: 'country', selectedIndex: 0,
+    options: Array.from({ length: 200 }, (_, i) => mkOption(`Country ${i}`)),
+  });
+  const smallSelect = mkEl({
+    tagName: 'SELECT', type: '', name: 'auth', selectedIndex: 0,
+    options: [mkOption('Yes'), mkOption('No')],
+  });
+
+  const evaluate = (nodes) => {
+    const fn = new Function('document', 'window', 'location', 'CSS',
+      `return ${cf.COLLECT_EXPRESSION}`);
+    return JSON.parse(fn(
+      { querySelectorAll: () => nodes, getElementById: () => null, querySelector: () => null },
+      { getComputedStyle: () => ({ display: 'block', visibility: 'visible' }) },
+      { href: 'https://example.test/apply' },
+      { escape: (x) => x },
+    ));
+  };
+
+  const { fields } = evaluate([bigSelect, smallSelect]);
+  const big = fields.find(f => f.name === 'country');
+  const small = fields.find(f => f.name === 'auth');
+
+  if (big && big.optionsTruncated === true) pass('a 200-option dropdown is flagged optionsTruncated');
+  else fail(`a capped option list must announce it: ${JSON.stringify(big)}`);
+
+  if (big && big.options.length === 60) pass('the cap still holds at 60 options — context is not flooded');
+  else fail(`cap not applied: ${big?.options.length} options collected`);
+
+  if (small && small.optionsTruncated === false) pass('a short list is not flagged truncated');
+  else fail(`a 2-option list must not be flagged: ${JSON.stringify(small)}`);
 }
 
 // --- Greenhouse renders a combobox plus an inert backing input ---------------
