@@ -136,6 +136,11 @@ async function main() {
       multiline: f.multiline ?? (String(f.type ?? '').toLowerCase() === 'textarea'),
       required: f.required,
       maxLength: f.maxLength,
+      // Same defensiveness as `multiline` above: a hand-made or older --stdin
+      // payload carries no valueLength, and its value is whole, so its own
+      // length is the true one.
+      valueLength: f.valueLength ?? String(f.value ?? '').length,
+      valueTruncated: f.valueTruncated ?? false,
     });
     if (problems.length) rows.push({ ...f, problems });
   }

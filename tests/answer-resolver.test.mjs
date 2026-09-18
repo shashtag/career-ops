@@ -308,15 +308,58 @@ if (store) {
   if (hostile.url.length <= 2000) pass('the page URL is bounded — it is display-only, nothing resolves against it');
   else fail(`unbounded url: ${hostile.url.length} chars`);
 
-  // Deliberate exception, and the reason it is one. lib/answer-sanitizer.mjs
-  // checks value against the field's maxLength and a 2200-char warning, both
-  // reading v.length. Truncate here and an over-long answer passes the last
-  // gate before submit as clean — sanitisation manufacturing a silent success,
-  // exactly the failure parseCollected's empty-list guard exists to prevent.
+  // value is capped too, but never silently: lib/answer-sanitizer.mjs checks it
+  // against the field's maxLength and a 2200-char warning, so the true length
+  // has to ride along or an over-long answer passes the last gate before submit
+  // as clean — sanitisation manufacturing a silent success, exactly the failure
+  // parseCollected's empty-list guard exists to prevent.
   const val = hostile.fields.find(f => f.name === 'val');
-  if (val && val.value.length === blob.length) {
-    pass('value is NOT truncated — the submit gate checks its true length');
-  } else fail(`value was truncated to ${val?.value.length}; the over-max-length check now reads a lie`);
+  if (val && val.value.length === 8000) pass('value is bounded so one field cannot spend the context budget');
+  else fail(`value cap not applied: ${val?.value.length} chars`);
+
+  if (val && val.valueLength === blob.length && val.valueTruncated === true) {
+    pass('the true value length rides along with the cap, so the submit gate stays honest');
+  } else fail(`true length lost: valueLength=${val?.valueLength} of ${blob.length}`);
+
+  const shortVal = evaluate([mkEl({ tagName: 'INPUT', type: 'text', name: 'ok', value: 'Shashwat' })]);
+  const ok = shortVal.fields[0];
+  if (ok.value === 'Shashwat' && ok.valueLength === 8 && ok.valueTruncated === false) {
+    pass('a normal answer is untouched — the cap fires only on the pathological case');
+  } else fail(`ordinary value disturbed: ${JSON.stringify(ok)}`);
+}
+
+// --- auditAnswer must measure the field, not the prefix it was handed --------
+// The gate before submit. Measured: a 60k-char answer in a 20k-max field, capped
+// to 8k on the way in, produced only `warn:suspiciously-long` — no error, so
+// audit-form-fill exits 0 and the run reads as clean.
+{
+  const san = await import(pathToFileURL(join(ROOT, 'lib', 'answer-sanitizer.mjs')).href);
+  const codes = (ps) => ps.map(x => `${x.severity}:${x.code}`);
+  const capped = 'word '.repeat(1600); // 8000 chars, as the collector hands it over
+
+  const honest = codes(san.auditAnswer('Essay', capped,
+    { multiline: true, maxLength: 20000, valueLength: 60000, valueTruncated: true }));
+  if (honest.includes('error:over-max-length')) {
+    pass('over-max-length is measured against the true length, not the capped prefix');
+  } else fail(`a 60k answer in a 20k field slipped the gate: ${honest.join(', ')}`);
+
+  const blind = codes(san.auditAnswer('Essay', capped, { multiline: true, maxLength: 20000 }));
+  if (!blind.includes('error:over-max-length')) {
+    pass('...and without the true length it would not be — the bug this guards');
+  } else fail('fixture no longer demonstrates the failure it is pinning');
+
+  if (honest.includes('warn:value-truncated')) {
+    pass('a capped value is announced, since the content checks only read a prefix');
+  } else fail('a truncated value must never audit as a clean full read');
+
+  if (codes(san.auditAnswer('Q', 'short answer', { maxLength: 500 })).length === 0) {
+    pass('an ordinary answer with no length metadata still audits clean');
+  } else fail('the fallback path flags a healthy field');
+
+  const legacy = codes(san.auditAnswer('Essay', 'x'.repeat(3000), { multiline: true }));
+  if (legacy.includes('warn:suspiciously-long')) {
+    pass('value.length still stands when no valueLength is supplied (older --stdin payloads)');
+  } else fail('backward compatibility broken for payloads without valueLength');
 }
 
 // --- Greenhouse renders a combobox plus an inert backing input ---------------
